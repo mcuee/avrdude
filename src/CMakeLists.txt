@@ -55,16 +55,16 @@ if(WIN32)
     set(EXTRA_WINDOWS_LIBRARIES setupapi ws2_32)
 endif()
 
-if(MINGW)
-    set(EXTRA_WINDOWS_LIBRARIES termcap z)
-endif()
-
-if(APPLE)
+if (CMAKE_SYSTEM_NAME STREQUAL "Macos")
     set(EXTRA_MACOS_LIBRARIES ncurses)
 endif()
 
-if(LINUX)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(EXTRA_LINUX_LIBRARIES tinfo udev pthread z)
+endif()
+
+if(MINGW)
+    set(EXTRA_WINDOWS_LIBRARIES termcap z)
 endif()
 
 if(MSVC)
