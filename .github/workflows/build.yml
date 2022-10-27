@@ -50,6 +50,7 @@ jobs:
           libhidapi-dev
           libftdi1-dev
           libreadline-dev
+          libudev-dev
       - name: Configure
         run: >-
           cmake
