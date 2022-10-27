@@ -100,7 +100,7 @@ jobs:
       - name: Configure
         run: >-
           cmake
-          -D CMAKE_C_FLAGS=-I/usr/local/include -pthread -framework Foundation -framework IOKit -framework Cocoa -framework Security
+          -D CMAKE_C_FLAGS="-I/usr/local/include -pthread -framework Foundation -framework IOKit -framework Cocoa -framework Security"
           -D CMAKE_EXE_LINKER_FLAGS=-L/usr/local/Cellar
           -D DEBUG_CMAKE=1
           -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
