@@ -55,6 +55,18 @@ if(WIN32)
     set(EXTRA_WINDOWS_LIBRARIES setupapi ws2_32)
 endif()
 
+if(MINGW)
+    set(EXTRA_WINDOWS_LIBRARIES termcap z)
+endif()
+
+if(APPLE)
+    set(EXTRA_MACOS_LIBRARIES ncurses)
+endif()
+
+if(LINUX)
+    set(EXTRA_LINUX_LIBRARIES tinfo udev pthread z)
+endif()
+
 if(MSVC)
     enable_language(CXX)
 
@@ -269,6 +281,9 @@ target_link_libraries(libavrdude
     ${LIB_LIBFTDI1}
     ${LIB_LIBREADLINE}
     ${EXTRA_WINDOWS_LIBRARIES}
+    ${EXTRA_MINGW_LIBRARIES}
+    ${EXTRA_MACOS_LIBRARIES}
+    ${EXTRA_LINUX_LIBRARIES}
     )
 
 add_executable(avrdude
