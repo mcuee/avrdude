@@ -1,291 +1,87 @@
-#
-# build.yml - GitHub build action for AVRDUDE
-# Copyright (C) 2021 Marius Greuel
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
-#
+name: release
 
-name: Build
+env:
+  # The name of the project
+  PROJECT_NAME: avrdude
+  DIST_DIR: dist
+  ARTIFACT_NAME: dist
+  # The project's folder on Arduino's download server for uploading builds
+  AWS_PLUGIN_TARGET: /tools/
 
 on:
   push:
-    branches-ignore:
-      - 'onlinedocs'
-  pull_request:
-    branches-ignore:
-      - 'onlinedocs'
-  workflow_call:
-
-env:
-  BUILD_TYPE: RelWithDebInfo
+    tags:
+      - "[0-9]+.[0-9]+*"
 
 jobs:
-  linux-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install prerequisites
-        run: >-
-          sudo apt-get update
-
-          sudo apt-get install -y
-          build-essential
-          cmake
-          flex
-          bison
-          libelf-dev
-          libusb-dev
-          libusb-1.0-0-dev
-          libhidapi-dev
-          libftdi1-dev
-          libreadline-dev
-          texinfo
-          texlive
-          texi2html
-      - name: Configure
-        run: >-
-          cmake
-          -D BUILD_DOC=1
-          -D DEBUG_CMAKE=1
-          -D HAVE_LINUXGPIO=1
-          -D HAVE_LINUXSPI=1
-          -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          -B build
-      - name: Build
-        run: cmake --build build
-      - name: Archive build artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-linux-x86_64
-          path: |
-            build/
-            !**/*.d
-            !**/*.o
-      - name: Archive executables
-        uses: actions/upload-artifact@v2
-        with:
-          name: avrdude-linux-x86_64
-          path: |
-            build/src/avrdude
-            build/src/avrdude.conf
-
-  linux:
-    runs-on: ubuntu-latest
-    container: debian:11
+  build:
+    name: build (${{ matrix.config.os }}, ${{ matrix.config.arch }})
+    runs-on:
+      ubuntu-latest
     strategy:
       matrix:
-        include:
-          - { arch: i386, processor: i686, prefix: i686-linux-gnu, inc-lib: i386-linux-gnu }
-          - { arch: armhf, processor: armhf, prefix: arm-linux-gnueabihf, inc-lib: arm-linux-gnueabihf }
-          - { arch: arm64, processor: aarch64, prefix: aarch64-linux-gnu, inc-lib: aarch64-linux-gnu }
+        config:
+          - os: Linux
+            arch: 64bit
+            cross_compile: x86_64-ubuntu16.04-linux-gnu
+          - os: Linux
+            arch: 32bit
+            cross_compile: i686-ubuntu16.04-linux-gnu
+          - os: Linux
+            arch: ARMv6
+            cross_compile: arm-linux-gnueabihf
+          - os: Linux
+            arch: ARM64
+            cross_compile: aarch64-linux-gnu
+          - os: macOS
+            arch: 64bit
+            cross_compile: x86_64-apple-darwin13
+            cross_compiler: o64-clang
+            ar: /opt/osxcross/target/bin/x86_64-apple-darwin13-ar # we have to manually specify the full path otherwise it's not found for some reason
+            ld: /opt/osxcross/target/bin/x86_64-apple-darwin13-ld
+          - os: Windows
+            arch: 32bit
+            cross_compile: i686-w64-mingw32
+            extension: .exe
+
+    container:
+      image: ghcr.io/arduino/crossbuild:0.2.1
+    
     steps:
-      - uses: actions/checkout@v2
-      - name: Add architecture
-        run: |
-          dpkg --add-architecture ${{matrix.arch}}
-          apt-get update
-      - name: Install prerequisites
-        run: >-
-          apt-get update
+    - name: Checkout avrdude repository
+      uses: actions/checkout@v3
+      with:
+        repository: avrdudes/avrdude
+        path: ${{ env.PROJECT_NAME }}
 
-          apt-get install -y
-          git
-          cmake
-          flex
-          bison
-          crossbuild-essential-${{matrix.arch}}
-          libelf-dev:${{matrix.arch}}
-          libusb-dev:${{matrix.arch}}
-          libusb-1.0-0-dev:${{matrix.arch}}
-          libhidapi-dev:${{matrix.arch}}
-          libftdi1-dev:${{matrix.arch}}
-          libreadline-dev:${{matrix.arch}}
-      - name: Configure
-        run: >-
-          cmake
-          -D DEBUG_CMAKE=1
-          -D HAVE_LINUXGPIO=1
-          -D HAVE_LINUXSPI=1
-          -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          -D CMAKE_SYSTEM_NAME=Linux
-          -D CMAKE_SYSTEM_PROCESSOR=${{matrix.processor}}
-          -D CMAKE_C_COMPILER=${{matrix.prefix}}-gcc
-          -D CMAKE_FIND_ROOT_PATH=/usr/${{matrix.prefix}}
-          -D CMAKE_INCLUDE_PATH=/usr/include/${{matrix.inc-lib}}
-          -D CMAKE_LIBRARY_PATH=/usr/lib/${{matrix.inc-lib}}
-          -B build
-      - name: Build
-        run: cmake --build build
-      - name: Archive build artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-linux-${{matrix.processor}}
-          path: |
-            build/
-            !**/*.d
-            !**/*.o
-      - name: Archive executables
-        uses: actions/upload-artifact@v2
-        with:
-          name: avrdude-linux-${{matrix.processor}}
-          path: |
-            build/src/avrdude
-            build/src/avrdude.conf
-
-  macos-x86_64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install prerequisites
-        run: >-
-          brew update
-
-          brew install
-          cmake
-          flex
-          bison
-          libelf
-          libusb
-          hidapi
-          libftdi
-      - name: Configure
-        run: >-
-          cmake
-          -D CMAKE_C_FLAGS=-I/usr/local/include
-          -D CMAKE_EXE_LINKER_FLAGS=-L/usr/local/Cellar
-          -D DEBUG_CMAKE=1
-          -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          -B build
-      - name: Build
-        run: cmake --build build
-      - name: Archive build artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-macos-x86_64
-          path: |
-            build/
-            !**/*.d
-            !**/*.o
-      - name: Archive executables
-        uses: actions/upload-artifact@v2
-        with:
-          name: avrdude-macos-x86_64
-          path: |
-            build/src/avrdude
-            build/src/avrdude.conf
-
-  msvc:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        include:
-          - { arch: x86, platform: Win32 }
-          - { arch: x64, platform: x64 }
-          - { arch: arm64, platform: ARM64 }
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install prerequisites
-        # As Chocolatey is notoriously unreliable, install winflexbison3 directly from GitHub.
-        # run: choco install winflexbison3
-        run: |
-          curl https://github.com/lexxmark/winflexbison/releases/download/v2.5.24/win_flex_bison-2.5.24.zip --location --output winflexbison.zip
-          unzip winflexbison.zip -d ${{github.workspace}}\winflexbison
-          echo "${{github.workspace}}\winflexbison" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Configure
-        run: >-
-          cmake
-          -A ${{matrix.platform}}
-          -D DEBUG_CMAKE=1
-          -D CMAKE_SYSTEM_VERSION=11
-          -D CMAKE_C_FLAGS_RELWITHDEBINFO="/MT /GL /Zi /O2 /Ob1 /DNDEBUG"
-          -D CMAKE_CXX_FLAGS_RELWITHDEBINFO="/MT /GL /Zi /O2 /Ob1 /DNDEBUG"
-          -D CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO="/DEBUG /INCREMENTAL:NO /LTCG /OPT:REF /OPT:ICF"
-          -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          -D USE_EXTERNAL=1
-          -B build
-      - name: Build
-        run: cmake --build build --config ${{env.BUILD_TYPE}}
-      - name: Archive build artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-msvc-${{matrix.arch}}
-          path: |
-            build/
-            !**/_deps/
-            !**/*.obj
-      - name: Move executables
-        run: |
-          mv build/src/RelWithDebInfo/avrdude.exe build/src
-          mv build/src/RelWithDebInfo/avrdude.pdb build/src
-      - name: Archive executables
-        uses: actions/upload-artifact@v2
-        with:
-          name: avrdude-msvc-${{matrix.arch}}
-          path: |
-            build/src/avrdude.exe
-            build/src/avrdude.pdb
-            build/src/avrdude.conf
-
-  mingw:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    strategy:
-      matrix:
-        include:
-          - { sys: mingw32, env: i686 }
-          - { sys: mingw64, env: x86_64 }
-    steps:
-      - uses: actions/checkout@v2
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{matrix.sys}}
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-${{matrix.env}}-gcc
-            mingw-w64-${{matrix.env}}-cmake
-            mingw-w64-${{matrix.env}}-libelf
-            mingw-w64-${{matrix.env}}-libusb
-            mingw-w64-${{matrix.env}}-libusb-compat-git
-            mingw-w64-${{matrix.env}}-hidapi
-            mingw-w64-${{matrix.env}}-libftdi
-      - name: Configure
-        run: >-
-          cmake
-          -G"MSYS Makefiles"
-          -D DEBUG_CMAKE=1
-          -D CMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          -B build
-      - name: Build
-        run: cmake --build build
-      - name: Archive build artifacts
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-mingw-${{matrix.env}}
-          path: |
-            build/
-      - name: Archive executables
-        uses: actions/upload-artifact@v2
-        with:
-          name: avrdude-mingw-${{matrix.env}}
-          path: |
-            build/src/avrdude.exe
-            build/src/avrdude.conf
+    - name: replace system ranlib with darwin one
+      # for some reason is not possible to override ranlib with env vars, so this is ugly but it's the only way I found
+      if: matrix.config.os == 'macOS'
+      run: |
+        mv /usr/bin/ranlib /usr/bin/ranlib.bk
+        ln -s /opt/osxcross/target/bin/${{ matrix.config.cross_compile }}-ranlib /usr/bin/ranlib
+    - name: Build Avrdude
+      working-directory: ${{ env.PROJECT_NAME }}
+      run: |
+        if [ "${{ matrix.config.os }}" = "macOS" ]; then
+          # For darwin we disable the static flags (not supported by clang) and we make some adjustments
+          cmake -DCMAKE_C_COMPILER=${{ matrix.config.cross_compiler }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cross_compiler }}++ -DCMAKE_AR=${{ matrix.config.ar }} -DCMAKE_LINKER=${{ matrix.config.ld}} -DCMAKE_EXE_LINKER_FLAGS="-L/opt/lib/${{ matrix.config.cross_compile }}/lib/ -lobjc -Wl,-framework,IOKit -Wl,-framework,CoreFoundation -Wl,-framework,Security" -DCMAKE_C_FLAGS="-I/opt/lib/${{ matrix.config.cross_compile }}/include -pthread" -DCMAKE_PREFIX_PATH=/opt/lib/${{ matrix.config.cross_compile }}/ -DHAVE_LIBFTDI="NO" -B build/
+        else
+          cmake -DCMAKE_C_COMPILER=${{ matrix.config.cross_compile }}-gcc -DCMAKE_CXX_COMPILER=${{ matrix.config.cross_compile }}-g++ -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" -DCMAKE_C_FLAGS="-I/opt/lib/${{ matrix.config.cross_compile }}/include/libusb-1.0/ -I/opt/lib/${{ matrix.config.cross_compile }}/include -pthread" -DCMAKE_PREFIX_PATH=/opt/lib/${{ matrix.config.cross_compile }}/ -DHAVE_LIBFTDI="NO" -B build/
+        fi
+        cmake --build build/ -v
+    - name: Package
+      working-directory: ${{ env.PROJECT_NAME }}
+      run: | # we need to create the subdir where to place binaries
+        mkdir -p ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }}/bin ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }}/etc
+        chmod +x build/src/${{ env.PROJECT_NAME }}${{ matrix.config.extension }}
+        mv -v build/src/${{ env.PROJECT_NAME }}${{ matrix.config.extension }} ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }}/bin
+        mv -v build/src/${{ env.PROJECT_NAME }}.conf ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }}/etc
+        mv -v COPYING ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }}/LICENSE.txt
+        tar -czv ${{ env.PROJECT_NAME }}_${{ matrix.config.os }}_${{ matrix.config.arch }} -f ${{ env.PROJECT_NAME }}_${GITHUB_REF##*/}_${{ matrix.config.os }}_${{ matrix.config.arch }}.tar.gz
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        if-no-files-found: error
+        name: ${{ env.ARTIFACT_NAME }}
+        path: ${{ env.PROJECT_NAME }}/${{ env.PROJECT_NAME }}_*
