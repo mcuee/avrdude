@@ -8,8 +8,8 @@
  * Published under GNU General Public License, version 3 (GPL-3.0)
  * Meta-author Stefan Rueger <stefan.rueger@urclocks.com>
  *
- * v 1.52
- * 13.06.2026
+ * v 1.53
+ * 27.06.2026
  *
  */
 
@@ -12276,7 +12276,8 @@ static const Configvalue _values_updipincfg_avr16la14[2] = {
 
 /*
  * AVR16DU14 AVR16DU20 AVR16DU28 AVR16DU32 AVR32DU14 AVR32DU20 AVR32DU28 AVR32DU32 AVR64DU28
- * AVR64DU32 AVR32SD20 AVR32SD28 AVR32SD32
+ * AVR64DU32 AVR16LA14 AVR16LA20 AVR16LA28 AVR16LA32 AVR32LA14 AVR32LA20 AVR32LA28 AVR32LA32
+ * AVR32SD20 AVR32SD28 AVR32SD32
  */
 static const Configvalue _values_browsave_avr16du14[2] = {
   {0, "br_erased", "BOOTROW is erased during chip erase"},
@@ -12290,6 +12291,12 @@ static const Configvalue _values_browsave_avr16du14[2] = {
 static const Configvalue _values_usbsink_avr16du14[2] = {
   {0, "disable", "USB VREG cannot sink current"},
   {1, "enable", "USB VREG can sink current"},
+};
+
+// AVR16LA14 AVR16LA20 AVR16LA28 AVR16LA32 AVR32LA14 AVR32LA20 AVR32LA28 AVR32LA32
+static const Configvalue _values_cpumon_avr16la14[2] = {
+  {0, "cm_disabled", "Check for illegal opcodes disabled"},
+  {1, "cm_enabled", "Check for illegal opcodes enabled"},
 };
 
 /*
@@ -14464,9 +14471,9 @@ const Configitem cfgtab_avr16la14[20] = {
   {"freqsel", 2, _values_freqsel_avr16ea28, "osccfg", 2, 0x08, 3, 0, "HF oscillator frequency"},
   {"rstpincfg", 2, _values_rstpincfg_avr16la14, "pincfg", 3, 0x01, 0, 0, "Reset Pin Configuration select"},
   {"updipincfg", 2, _values_updipincfg_avr16la14, "pincfg", 3, 0x02, 1, 1, "UPDI Pin Configuration select"},
-  {"cpumon", 0, NULL, "hwmoncfg", 4, 0x01, 0, 0, "CPU Monitor"},
+  {"cpumon", 2, _values_cpumon_avr16la14, "hwmoncfg", 4, 0x01, 0, 0, "CPU Hardware Monitor"},
   {"eesave", 2, _values_eesave_attiny202, "syscfg0", 5, 0x01, 0, 0, "EEPROM after chip erase"},
-  {"bootrowsave", 0, NULL, "syscfg0", 5, 0x02, 1, 0, "BOOTROW Save"},
+  {"browsave", 2, _values_browsave_avr16du14, "syscfg0", 5, 0x02, 1, 0, "BOOTROW after chip erase"},
   {"crcsel", 2, _values_crcsel_avr32da28, "syscfg0", 5, 0x40, 6, 0, "CRC select"},
   {"crcboot", 2, _values_crcboot_avr16la14, "syscfg0", 5, 0x80, 7, 0, "CRC of boot section during reset"},
   {"sut", 8, _values_sut_attiny202, "syscfg1", 6, 0x07, 0, 7, "startup time"},
