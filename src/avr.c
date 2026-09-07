@@ -1398,7 +1398,7 @@ int avr_verify_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRPART *v, co
       } else if((bdiff = (buf1[i] & bitmask) ^ (buf2[i] & bitmask))) {
         // Mismatch is not just in unused bits, loop over bit positions that differ
         for(unsigned int lbit; bdiff; bdiff ^= lbit) {
-           lbit = bdiff & -bdiff; // Lowest bit that differs
+           lbit = bdiff & (~bdiff + 1); // Lowest bit that differs (~x + 1 is -x without MSVC C4146)
            biterrs++;             // Number of bit mismatches
            bitsset += !!(lbit & buf1[i]); // The mismatched bit was set on device
         }
