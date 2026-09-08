@@ -30,7 +30,7 @@
     return -1; \
   if(verbose > 0 || rethelp) \
     autogen_help(); \
-  pmsg_error("(test) "); \
+  pmsg_error("(dryautogen) "); \
   msg_error(__VA_ARGS__); \
   msg_error("\n"); \
   return -1; \
@@ -253,7 +253,7 @@ int dryautogen(const AVRPART *part, const AVRMEM *mem, const char *filename) {
     goto done;
 
   if(!(dp = dryrun_part(part->id, NULL, pp.init, pp.random, pp.holes, pp.seed))) {
-    pmsg_error("(test) cannot autogenerate %s", filename);
+    pmsg_error("(dryautogen) cannot autogenerate %s", filename);
     goto done;
   }
 
@@ -268,11 +268,11 @@ int dryautogen(const AVRPART *part, const AVRMEM *mem, const char *filename) {
 
     int offset = fileio_mem_offset(dp, m);
     if(offset == (int) ~0U) {
-      pmsg_error("(test) unknown multimem offset for memory %s\n", m->desc);
+      pmsg_error("(dryautogen) unknown multimem offset for memory %s\n", m->desc);
       goto done;
     }
     if(offset < 0 || offset + m->size > any->size) {
-      pmsg_error("(test) multimem segment for memory %s is out of bounds\n", m->desc);
+      pmsg_error("(dryautogen) multimem segment for memory %s is out of bounds\n", m->desc);
       goto done;
     }
     unsigned char *b = any->buf + offset, *t = any->tags + offset;
