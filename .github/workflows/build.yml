@@ -149,7 +149,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
-    container: debian:11
+    container: debian:13
     strategy:
       matrix:
         include:
