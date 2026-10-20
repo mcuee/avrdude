@@ -368,12 +368,10 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{env.BUILD_TYPE}}
       - name: "avrdude -? (not installed)"
-        # FIXME: Skip running avrdude.
-        #        The exe file on arm64 is not runnable - x86_64 perhaps?
         if: matrix.arch != 'arm64'
         run: build/src/${{env.BUILD_TYPE}}/avrdude.exe -?
       - name: "Dryrun test (not installed)"
-        #        The exe file on arm64 is not runnable as the runner is x86_64.
+        # The exe file on arm64 is not runnable as the runner is x86_64.
         if: matrix.arch != 'arm64'
         run: |
           $tmp = [System.IO.Path]::GetTempPath()
@@ -424,9 +422,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: mingw64, env: x86_64 }
           - { sys: ucrt64, env: ucrt-x86_64 }
           - { sys: clang64, env: clang-x86_64 }
+          - { sys: clangarm64, env: clang-aarch64 }
     steps:
       - uses: actions/checkout@v6
       - uses: msys2/setup-msys2@v2
@@ -461,6 +459,8 @@ jobs:
       - name: "avrdude -? (not installed)"
         run: build/src/avrdude -?
       - name: "Dryrun test (not installed)"
+        # The exe file on arm64 is not runnable as the runner is x86_64.
+        if: matrix.sys != 'clangarm64'
         run: printf "\n\n" | ./tools/test-avrdude -v -e build/src/avrdude.exe -t . -c "-C build/src/avrdude.conf" -d0 -p"-cdryrun -pm2560" -p"-cdryrun -pavr64du28"
       - name: Archive build artifacts
         if: always()
