@@ -149,7 +149,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
-    container: debian:11
+    container: debian:13
     strategy:
       matrix:
         include:
@@ -201,6 +201,15 @@ jobs:
       - name: "avrdude -? (not installed)"
         if: matrix.arch == 'i386'
         run: build/src/avrdude -?
+      - name: "Dryrun test (not installed)"
+        if: matrix.arch == 'i386'
+        run: printf "\n\n" | ./tools/test-avrdude -v -e build/src/avrdude -c '-C build/src/avrdude.conf' -d0 -p"-cdryrun -pm2560" -p"-cdryrun -pavr64du28"
+      - name: Install
+        if: matrix.arch == 'i386'
+        run: cmake --build build --target install
+      - name: "Dryrun test (installed)"
+        if: matrix.arch == 'i386'
+        run: printf "\n\n" | ./tools/test-avrdude -v -d0 -p"-cdryrun -pm2560" -p"-cdryrun -pavr64du28"        
       - name: Archive build artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -359,13 +368,11 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{env.BUILD_TYPE}}
       - name: "avrdude -? (not installed)"
-        # FIXME: Skip running avrdude.
-        #        The exe file on arm64 is not runnable - x86_64 perhaps?
+        #  The exe file on arm64 is not runnable as the runner is x86_64.
         if: matrix.arch != 'arm64'
         run: build/src/${{env.BUILD_TYPE}}/avrdude.exe -?
       - name: "Dryrun test (not installed)"
-        # FIXME: Skip running avrdude.
-        #        The exe file on arm64 is not runnable - x86_64 perhaps?
+        # The exe file on arm64 is not runnable as the runner is x86_64.
         if: matrix.arch != 'arm64'
         run: |
           $tmp = [System.IO.Path]::GetTempPath()
@@ -416,7 +423,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: mingw64, env: x86_64 }
           - { sys: ucrt64, env: ucrt-x86_64 }
           - { sys: clang64, env: clang-x86_64 }
     steps:
@@ -452,9 +458,8 @@ jobs:
         run: cmake --build build
       - name: "avrdude -? (not installed)"
         run: build/src/avrdude -?
-      # Disabled so far due to problems writing to temp files.
-      # - name: "Dryrun test (not installed)"
-      #   run: printf "\n\n" | ./tools/test-avrdude -v -e build/src/avrdude.exe -c "-C build/src/avrdude.conf" -d0 -p"-cdryrun -pm2560" -p"-cdryrun -pavr64du28"
+      - name: "Dryrun test (not installed)"
+        run: printf "\n\n" | ./tools/test-avrdude -v -e build/src/avrdude.exe -t . -c "-C build/src/avrdude.conf" -d0 -p"-cdryrun -pm2560" -p"-cdryrun -pavr64du28"
       - name: Archive build artifacts
         if: always()
         uses: actions/upload-artifact@v7

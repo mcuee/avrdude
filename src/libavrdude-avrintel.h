@@ -11,8 +11,8 @@
  * Published under GNU General Public License, version 3 (GPL-3.0)
  * Meta-author Stefan Rueger <stefan.rueger@urclocks.com>
  *
- * v 1.53
- * 27.06.2026
+ * v 1.57
+ * 25.10.2026
  *
  */
 
@@ -776,6 +776,7 @@ extern const Avrintel uP_table[431];
 #define vts_lgt8f168p        26
 #define vts_lgt8f328p        26
 #define vts_atmega103        24
+#define vts_atmega103comp    24
 #define vts_atmega8hva       21
 #define vts_atmega16hva      21
 #define vts_atmega16hva2     22
@@ -1193,6 +1194,7 @@ extern const Avrintel uP_table[431];
 #define vbu_lgt8f168p        26
 #define vbu_lgt8f328p        26
 #define vbu_atmega103        24
+#define vbu_atmega103comp    24
 #define vbu_atmega8hva       21
 #define vbu_atmega16hva      21
 #define vbu_atmega16hva2     22
@@ -1682,6 +1684,7 @@ extern const char * const    vtab_atmega3290[25];
 #define vtab_atmega6490p     vtab_atmega3290
 
 extern const char * const    vtab_atmega103[24];
+#define vtab_atmega103comp   vtab_atmega103
 
 extern const char * const    vtab_atmega8hva[21];
 #define vtab_atmega16hva     vtab_atmega8hva
@@ -1990,10 +1993,9 @@ extern const Configitem      cfgtab_at90s2313[3];
 extern const Configitem      cfgtab_at90s2323[3];
 
 extern const Configitem      cfgtab_at90s2333[5];
+#define cfgtab_at90s4433     cfgtab_at90s2333
 
 extern const Configitem      cfgtab_at90s2343[3];
-
-extern const Configitem      cfgtab_at90s4433[5];
 
 extern const Configitem      cfgtab_at90s8515comp[13];
 
@@ -3687,6 +3689,7 @@ extern const Uart_conf       uarts_atmega165[1];
 #define uarts_atmega6490a    uarts_atmega165
 #define uarts_atmega6490p    uarts_atmega165
 #define uarts_atmega103      uarts_atmega165
+#define uarts_atmega103comp  uarts_atmega165
 
 extern const Uart_conf       uarts_atmega328pb[2];
 

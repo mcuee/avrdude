@@ -314,11 +314,10 @@ static int net_send(const union filedescriptor *fd, const unsigned char *buf, si
   if(!len)
     return 0;
 
-  if(verblevel >= MSG_TRACE)
-    trace_buffer(__func__, buf, len);
+  trace_buffer(__func__, buf, len);
 
   while(len) {
-    rc = send(fd->ifd, (const char *) buf, len > 1024? 1024: len, 0);
+    rc = send(fd->ifd, (const char *) buf, minm(len, 1024), 0);
     if(rc < 0) {
       FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
         FORMAT_MESSAGE_FROM_SYSTEM |
@@ -351,11 +350,10 @@ static int ser_send(const union filedescriptor *fd, const unsigned char *buf, si
   if(!len)
     return 0;
 
-  if(verblevel >= MSG_TRACE)
-    trace_buffer(__func__, buf, len);
+  trace_buffer(__func__, buf, len);
 
   // Set minimum r/w timeout to 2000 ms or higher to cater for 110 baud or faster
-  if(!serial_w32SetRWTimeOut(hComPort, (len > 20? len: 20)*100)) {
+  if(!serial_w32SetRWTimeOut(hComPort, maxm(len, 20)*100)) {
     pmsg_error("cannot set r/w timeout for serial port\n");
     return -1;
   }
@@ -429,9 +427,7 @@ static int net_recv(const union filedescriptor *fd, unsigned char *buf, size_t b
     len += rc;
   }
 
-  if(verblevel >= MSG_TRACE)
-    trace_buffer(__func__, buf, len);
-
+  trace_buffer(__func__, buf, len);
   return 0;
 }
 
@@ -449,7 +445,7 @@ static int ser_recv(const union filedescriptor *fd, unsigned char *buf, size_t b
   }
 
   // Ensure can receive buflen bytes at 8N1 at 110 baud or higher: one byte takes 91 ms at 110 baud
-  long timeout = (long) buflen*100 > serial_recv_timeout? (long) buflen*100: serial_recv_timeout;
+  long timeout = maxm((long) buflen*100, serial_recv_timeout);
   if(!serial_w32SetTimeOut(hComPort, timeout)) {
     pmsg_error("cannot set read timeout for serial port\n");
     return -1;
@@ -473,9 +469,7 @@ static int ser_recv(const union filedescriptor *fd, unsigned char *buf, size_t b
     return -1;
   }
 
-  if(verblevel >= MSG_TRACE)
-    trace_buffer(__func__, buf, read);
-
+  trace_buffer(__func__, buf, read);
   return 0;
 }
 

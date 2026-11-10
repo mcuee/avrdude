@@ -116,7 +116,7 @@ static void dump_mem(const unsigned char *buf, size_t len) {
 static int buspirate_send_bin(const PROGRAMMER *pgm, const unsigned char *data, size_t len) {
   int rc;
 
-  pmsg_debug("buspirate_send_bin():\n");
+  pmsg_debug("%s():\n", __func__);
   dump_mem(data, len);
 
   rc = serial_send(&pgm->fd, data, len);
@@ -131,7 +131,7 @@ static int buspirate_recv_bin(const PROGRAMMER *pgm, unsigned char *buf, size_t 
   if(rc < 0)
     return EOF;
 
-  pmsg_debug("buspirate_recv_bin():\n");
+  pmsg_debug("%s():\n", __func__);
   dump_mem(buf, len);
 
   return len;
@@ -447,7 +447,7 @@ static int buspirate_open(PROGRAMMER *pgm, const char *port) {
   union pinfo pinfo;
   pinfo.serialinfo.baud = pgm->baudrate? pgm->baudrate: 115200;
   pinfo.serialinfo.cflags = SERIAL_8N1;
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -915,7 +915,7 @@ static int buspirate_paged_load(const PROGRAMMER *pgm, const AVRPART *p, const A
   unsigned char buf[275];
   unsigned int addr = 0;
 
-  msg_debug("buspirate_paged_load(..,%s,%d,%d,%d)\n", m->desc, m->page_size, address, n_bytes);
+  msg_debug("%s(...,%s,%d,%d,%d)\n", __func__, m->desc, m->page_size, address, n_bytes);
 
   // This should never happen, but still ...
   if(my.flag & BP_FLAG_NOPAGEDREAD) {
@@ -1079,12 +1079,34 @@ static int buspirate_program_enable(const PROGRAMMER *pgm, const AVRPART *p) {
 
   memset(cmd, 0, sizeof(cmd));
   avr_set_bits(p->op[AVR_OP_PGM_ENABLE], cmd);
-  pgm->cmd(pgm, cmd, res);
 
-  if(res[2] != cmd[1])
-    return -2;
+  /*
+   * The Bus Pirate drives SCK low from the start of SPI mode while RESET is
+   * still high, so target code that drives SCK high (eg, Blink on an Uno, where
+   * D13 is SCK) fights it until RESET goes low, and the AVR may then not echo
+   * 0x53. As the datasheets advise, give RESET a positive pulse (CS high, CS
+   * low) now that SCK is low and issue a new Programming Enable. This needs
+   * binary SPI mode (raw-wire mode has other CS commands) and RESET on CS only.
+   */
+  int attempts = (my.flag & BP_FLAG_IN_BINMODE) && !(my.flag & BP_FLAG_XPARM_RAWFREQ) &&
+    my.reset == BP_RESET_CS? 4: 1;
 
-  return 0;
+  for(int i = 0; i < attempts; i++) {
+    if(i) {                     // CS high (0x03), CS low (0x02)
+      pmsg_notice("program enable command not successful; pulsing RESET and retrying\n");
+      if(buspirate_expect_bin_byte(pgm, 0x03, 0x01) != 1 || buspirate_expect_bin_byte(pgm, 0x02, 0x01) != 1) {
+        pmsg_error("did not get a response to CS command\n");
+        return -1;
+      }
+      usleep(20000);            // Wait at least 20 ms before Programming Enable
+    }
+    if(pgm->cmd(pgm, cmd, res) < 0)
+      return -1;
+    if(res[2] == cmd[1])
+      return 0;
+  }
+
+  return -2;
 }
 
 static int buspirate_chip_erase(const PROGRAMMER *pgm, const AVRPART *p) {

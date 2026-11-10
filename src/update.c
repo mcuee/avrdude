@@ -33,9 +33,10 @@
 #include "avrdude.h"
 #include "libavrdude.h"
 
-// Is s a multi-memory string (comma-separates list, all, ALL, etc or list subtraction)?
+// Is s a multi-memory string (comma-separated list, all, ALL, test, etc or list subtraction)?
 static int is_multimem(const char *s) {
-  return str_eq(s, "ALL") || str_eq(s, "all") || str_eq(s, "etc") || strpbrk(s, "-,\\");
+  return str_eq(s, "ALL") || str_eq(s, "all") || str_eq(s, "test") || str_eq(s, "etc") ||
+    strpbrk(s, "-,\\");
 }
 
 /*
@@ -50,6 +51,11 @@ static int is_multimem(const char *s) {
 UPDATE *parse_op(const char *s) {
   // Assume -U <file>[:<fmt>] first
   UPDATE *upd = (UPDATE *) mmt_malloc(sizeof *upd);
+
+  if(str_eq(s, "end_setup")) {
+    upd->marker = MARKER_END_SETUP;
+    return upd;
+  }
 
   upd->memstr = NULL;           // Defaults to flash or application
   upd->op = DEVICE_WRITE;
@@ -283,6 +289,13 @@ static int is_backup_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRMEM *
     mem_is_in_fuses(mem)? mem_is_fuses(mem) || !avr_locate_fuses(p): is_interesting_mem(pgm, p, mem);
 }
 
+// Whether a memory should be included in a dry:... file: writeable memories plus signature
+static int is_test_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRMEM *mem) {
+  return
+    mem_is_readonly(mem)? mem_is_signature(mem):
+    is_interesting_mem(pgm, p, mem);
+}
+
 // Add (not == 0) or subtract (not == 1) a memory from list
 static int memadd(AVRMEM **mlist, int nm, int not, AVRMEM *m) {
   for(int i = 0; i < nm; i++)
@@ -297,8 +310,8 @@ static int memadd(AVRMEM **mlist, int nm, int not, AVRMEM *m) {
 }
 
 /*
- * Generate a memory list from string mstr, part p and intended programming
- * modes pm; then put number of memories into *np.
+ * Generate a memory list from string mstr, programmer pgm, and part p; then
+ * put number of memories into *np.
  *
  * Memory list can be sth like ee,fl,all,-cal,efuse. -mem or /mem removes it
  * from the list. Normal use is to pass NULL for dry and let the function write
@@ -325,6 +338,10 @@ AVRMEM **memory_list(const char *mstr, const PROGRAMMER *pgm, const AVRPART *p, 
     } else if(str_eq(s, "all") || str_eq(s, "etc")) {
       for(LNODEID lm = lfirst(p->mem); lm; lm = lnext(lm))
         if(is_backup_mem(pgm, p, (m = ldata(lm))))
+          nm = memadd(umemlist, nm, not, m);
+    } else if(str_eq(s, "test")) {
+      for(LNODEID lm = lfirst(p->mem); lm; lm = lnext(lm))
+        if(is_test_mem(pgm, p, (m = ldata(lm))))
           nm = memadd(umemlist, nm, not, m);
     } else if(!*s) {            // Ignore empty list elements
     } else {
@@ -381,6 +398,9 @@ int memlist_contains_flash(const char *mstr, const AVRPART *p) {
 // Basic checks to reveal serious failure before programming (and on autodetect set format)
 int update_dryrun(const AVRPART *p, UPDATE *upd) {
   int known, format_detect, ret = LIBAVRDUDE_SUCCESS;
+
+  if(upd->marker)
+    return 0;
 
   if(upd->cmdline) {            // Todo: parse terminal command line?
     cx->upd_termcmds = mmt_realloc(cx->upd_termcmds, sizeof(*cx->upd_termcmds)*(cx->upd_nterms + 1));
@@ -640,6 +660,12 @@ int do_op(const PROGRAMMER *pgm, const AVRPART *p, const UPDATE *upd, enum updat
   Filestats fs;
   const char *umstr = upd->memstr;
 
+  if(upd->marker) {
+    if(upd->marker == MARKER_END_SETUP)
+      cx->dry_end_setup = 1;
+    return 0;
+  }
+
   if(pgm->updatehook)
     pgm->updatehook(pgm, p, upd, flags);
 
@@ -677,7 +703,7 @@ int do_op(const PROGRAMMER *pgm, const AVRPART *p, const UPDATE *upd, enum updat
     seglist = mmt_malloc(ns*sizeof *seglist);
   }
 
-  mem = umemlist? fileio_any_memory("any"): avr_locate_mem(p, umstr);
+  mem = umemlist? fileio_any_memory("any:do_op"): avr_locate_mem(p, umstr);
   if(mem == NULL) {
     pmsg_warning("skipping -U %s:... as memory not defined for part %s\n", umstr, p->desc);
     return LIBAVRDUDE_SOFTFAIL;

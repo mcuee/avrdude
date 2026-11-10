@@ -298,7 +298,7 @@ static void jtagmkII_prmsg(const PROGRAMMER *pgm_unused, unsigned char *data, si
     if(len > 1)
       switch(data[1]) {
       case EMULATOR_MODE_DEBUGWIRE:
-        msg_info(": DebugWire");
+        msg_info(": debugWIRE");
         break;
       case EMULATOR_MODE_JTAG:
         msg_info(": JTAG");
@@ -474,7 +474,7 @@ static int jtagmkII_recv_frame(const PROGRAMMER *pgm, unsigned char **msg, unsig
   double timeoutval = 100;      // Seconds
   double tstart, tnow;
 
-  pmsg_trace("jtagmkII_recv():\n");
+  pmsg_trace("%s():\n", __func__);
 
   tstart = avr_timestamp();
 
@@ -604,9 +604,7 @@ int jtagmkII_recv(const PROGRAMMER *pgm, unsigned char **msg) {
        */
       memmove(*msg, *msg + 8, rv);
 
-      if(verblevel >= MSG_TRACE)
-        trace_buffer(__func__, *msg, rv);
-
+      trace_buffer(__func__, *msg, rv);
       return rv;
     }
     if(r_seqno == 0xffff) {
@@ -627,7 +625,7 @@ int jtagmkII_getsync(const PROGRAMMER *pgm, int mode) {
   unsigned int fwver, hwver;
   int is_dragon;
 
-  pmsg_debug("jtagmkII_getsync()\n");
+  pmsg_debug("%s()\n", __func__);
 
   if(str_starts(pgm->ptyp, "JTAG")) {
     is_dragon = 0;
@@ -641,7 +639,7 @@ int jtagmkII_getsync(const PROGRAMMER *pgm, int mode) {
 
     // Get the sign-on information
     buf[0] = CMND_GET_SIGN_ON;
-    pmsg_notice2("jtagmkII_getsync() attempt %d of %d: sending sign-on command: ", tries + 1, MAXTRIES);
+    pmsg_notice2("%s() attempt %d of %d: sending sign-on command: ", __func__, tries + 1, MAXTRIES);
     jtagmkII_send(pgm, buf, 1);
 
     status = jtagmkII_recv(pgm, &resp);
@@ -738,7 +736,7 @@ retry:
   buf[0] = mode;
   if(jtagmkII_setparm(pgm, PAR_EMULATOR_MODE, buf) < 0) {
     if(mode == EMULATOR_MODE_SPI) {
-      pmsg_warning("ISP activation failed, trying debugWire\n");
+      pmsg_warning("ISP activation failed, trying debugWIRE\n");
       buf[0] = EMULATOR_MODE_DEBUGWIRE;
       if(jtagmkII_setparm(pgm, PAR_EMULATOR_MODE, buf) < 0)
         return -1;
@@ -833,9 +831,9 @@ static int jtagmkII_chip_erase(const PROGRAMMER *pgm, const AVRPART *p) {
   return 0;
 }
 
-// There is no chip erase functionality in debugWire mode
+// There is no chip erase functionality in debugWIRE mode
 static int jtagmkII_chip_erase_dw(const PROGRAMMER *pgm_unused, const AVRPART *p_unused) {
-  pmsg_info("chip erase not supported in debugWire mode\n");
+  pmsg_info("chip erase not supported in debugWIRE mode\n");
 
   return 0;
 }
@@ -982,7 +980,7 @@ static int jtagmkII_reset(const PROGRAMMER *pgm, unsigned char flags) {
   unsigned char buf[2], *resp, c;
 
   /*
-   * In debugWire mode, don't reset.  Do a forced stop, and tell the ICE to
+   * In debugWIRE mode, don't reset.  Do a forced stop, and tell the ICE to
    * stop any timers, too.
    */
   if(pgm->flag & PGM_FL_IS_DW) {
@@ -1093,6 +1091,20 @@ static int jtagmkII_program_disable(const PROGRAMMER *pgm) {
   c = resp[0];
   mmt_free(resp);
   if(c != RSP_OK) {
+    /*
+     * The JTAG ICE mkII couples leaving progmode with re-attaching the
+     * on-chip debug system; on a part with the OCDEN fuse unprogrammed that
+     * attach cannot succeed and the ICE answers RSP_FAILED even though the
+     * memory operations all completed. A reset releases the target, so this
+     * is only an error if the reset fails too.
+     */
+    if(jtagmkII_reset(pgm, 0x01) >= 0) {
+      my.recently_written = 0;
+      my.prog_enabled = 0;
+      pmsg_notice("leave progmode declined by ICE (%s), target reset and running; "
+        "this is expected when the OCDEN fuse is unprogrammed\n", jtagmkII_get_rc(pgm, c));
+      return 0;
+    }
     pmsg_error("bad response to leave progmode command: %s\n", jtagmkII_get_rc(pgm, c));
     return -1;
   }
@@ -1168,7 +1180,7 @@ static int jtagmkII_initialize(const PROGRAMMER *pgm, const AVRPART *p) {
 
   ok = 0;
   if(pgm->flag & PGM_FL_IS_DW) {
-    ifname = "debugWire";
+    ifname = "debugWIRE";
     if(is_debugwire(p))
       ok = 1;
   } else if(pgm->flag & PGM_FL_IS_PDI) {
@@ -1415,7 +1427,7 @@ static int jtagmkII_open(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1465,7 +1477,7 @@ static int jtagmkII_open_dw(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1515,7 +1527,7 @@ static int jtagmkII_open_pdi(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1571,7 +1583,7 @@ static int jtagmkII_dragon_open(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1621,7 +1633,7 @@ static int jtagmkII_dragon_open_dw(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1667,7 +1679,7 @@ static int jtagmkII_dragon_open_pdi(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -1685,7 +1697,7 @@ void jtagmkII_close(PROGRAMMER *pgm) {
   int status;
   unsigned char buf[1], *resp, c;
 
-  pmsg_notice2("jtagmkII_close()\n");
+  pmsg_notice2("%s()\n", __func__);
 
   if(pgm->flag & (PGM_FL_IS_PDI | PGM_FL_IS_JTAG)) {
     // When in PDI or JTAG mode, restart target.
@@ -1756,7 +1768,7 @@ static int jtagmkII_page_erase(const PROGRAMMER *pgm, const AVRPART *p, const AV
   int status, tries;
   long otimeout = serial_recv_timeout;
 
-  pmsg_notice2("jtagmkII_page_erase(.., %s, 0x%x)\n", m->desc, addr);
+  pmsg_notice2("%s(..., %s, 0x%x)\n", __func__, m->desc, addr);
 
   if(is_classic(p) && !mem_is_userrow(m)) {
     pmsg_error("page erase only available for UPDI/XMEGAs or for classic usersig mem\n");
@@ -1856,7 +1868,7 @@ static int jtagmkII_paged_write(const PROGRAMMER *pgm, const AVRPART *p, const A
   int status, tries, dynamic_mtype = 0;
   long otimeout = serial_recv_timeout;
 
-  pmsg_notice2("jtagmkII_paged_write(.., %s, %d, %d)\n", m->desc, page_size, n_bytes);
+  pmsg_notice2("%s(..., %s, %d, %d)\n", __func__, m->desc, page_size, n_bytes);
 
   if(!(pgm->flag & PGM_FL_IS_DW) && jtagmkII_program_enable(pgm) < 0)
     return -1;
@@ -1968,7 +1980,7 @@ static int jtagmkII_paged_load(const PROGRAMMER *pgm, const AVRPART *p, const AV
   int status, tries, dynamic_mtype = 0;
   long otimeout = serial_recv_timeout;
 
-  pmsg_notice2("jtagmkII_paged_load(.., %s, %d, %d)\n", m->desc, page_size, n_bytes);
+  pmsg_notice2("%s(..., %s, %d, %d)\n", __func__, m->desc, page_size, n_bytes);
 
   if(!(pgm->flag & PGM_FL_IS_DW) && jtagmkII_program_enable(pgm) < 0)
     return -1;
@@ -2076,7 +2088,7 @@ static int jtagmkII_read_byte(const PROGRAMMER *pgm, const AVRPART *p, const AVR
   unsigned long paddr = 0UL, *paddr_ptr = NULL;
   unsigned int pagesize = 0;
 
-  pmsg_notice2("jtagmkII_read_byte(.., %s, 0x%lx, ...)\n", mem->desc, addr);
+  pmsg_notice2("%s(..., %s, 0x%lx, ...)\n", __func__, mem->desc, addr);
 
   if(!(pgm->flag & PGM_FL_IS_DW) && jtagmkII_program_enable(pgm) < 0)
     return -1;
@@ -2093,7 +2105,7 @@ static int jtagmkII_read_byte(const PROGRAMMER *pgm, const AVRPART *p, const AVR
     cache_ptr = my.flash_pagecache;
   } else if(mem_is_eeprom(mem)) {
     if((pgm->flag & PGM_FL_IS_DW) || (p->prog_modes & (PM_PDI | PM_UPDI))) {
-      // debugWire cannot use page access for EEPROM
+      // debugWIRE cannot use page access for EEPROM
       cmd[1] = MTYPE_EEPROM;
     } else {
       cmd[1] = MTYPE_EEPROM_PAGE;
@@ -2133,7 +2145,7 @@ static int jtagmkII_read_byte(const PROGRAMMER *pgm, const AVRPART *p, const AVR
 
     if(pgm->flag & PGM_FL_IS_DW) {
       /*
-       * In debugWire mode, there is no accessible memory area to read the
+       * In debugWIRE mode, there is no accessible memory area to read the
        * signature from, but the essential two bytes can be read as a parameter
        * from the ICE.
        */
@@ -2175,7 +2187,7 @@ static int jtagmkII_read_byte(const PROGRAMMER *pgm, const AVRPART *p, const AVR
     return -1;
   }
 
-  // If the respective memory area is not supported under debugWire, leave here
+  // If the respective memory area is not supported under debugWIRE, leave here
   if(unsupp) {
     *value = 42;
     return -1;
@@ -2250,7 +2262,7 @@ static int jtagmkII_write_byte(const PROGRAMMER *pgm, const AVRPART *p, const AV
   unsigned char *resp = NULL, writedata, writedata2 = 0xFF;
   int status, tries, need_progmode = 1, unsupp = 0, writesize = 1;
 
-  pmsg_notice2("jtagmkII_write_byte(.., %s, 0x%lx, ...)\n", mem->desc, addr);
+  pmsg_notice2("%s(..., %s, 0x%lx, 0x%02x)\n", __func__, mem->desc, addr, data);
 
   addr += mem->offset;
 
@@ -2407,7 +2419,7 @@ int jtagmkII_getparm(const PROGRAMMER *pgm, unsigned char parm, unsigned char *v
   int status;
   unsigned char buf[2], *resp, c;
 
-  pmsg_notice2("jtagmkII_getparm()\n");
+  pmsg_notice2("%s()\n", __func__);
 
   buf[0] = CMND_GET_PARAMETER;
   buf[1] = parm;
@@ -2451,7 +2463,7 @@ static int jtagmkII_setparm(const PROGRAMMER *pgm, unsigned char parm, unsigned 
   size_t size;
   const char *parstr = "???";
 
-  pmsg_notice2("jtagmkII_setparm()\n");
+  pmsg_notice2("%s()\n", __func__);
 
   switch(parm) {
   case PAR_HW_VERSION:
@@ -2618,7 +2630,7 @@ static int jtagmkII_avr32_reset(const PROGRAMMER *pgm, unsigned char val, unsign
   int status;
   unsigned char buf[3], *resp;
 
-  pmsg_notice("jtagmkII_avr32_reset(%2.2x)\n", val);
+  pmsg_notice("%s(%2.2x)\n", __func__, val);
 
   buf[0] = CMND_GET_IR;
   buf[1] = 0x0C;
@@ -2654,7 +2666,7 @@ static int jtagmkII_reset32(const PROGRAMMER *pgm, unsigned short flags) {
   unsigned char *resp, buf[3];
   unsigned long val = 0;
 
-  pmsg_notice("jtagmkII_reset32(%2.2x)\n", flags);
+  pmsg_notice("%s(%2.2x)\n", __func__, flags);
 
   status = -1;
 
@@ -3075,7 +3087,7 @@ static int jtagmkII_chip_erase32(const PROGRAMMER *pgm, const AVRPART *p_unused)
   unsigned long val = 0;
   unsigned int lineno;
 
-  pmsg_notice("jtagmkII_chip_erase32()\n");
+  pmsg_notice("%s()\n", __func__);
 
   status = jtagmkII_reset32(pgm, AVR32_RESET_CHIP_ERASE);
   if(status != 0)
@@ -3249,7 +3261,7 @@ static int jtagmkII_open32(PROGRAMMER *pgm, const char *port) {
 #endif
   }
 
-  pgm->port = port;
+  pgm->chosen_port = port;
   int rc;
   if((rc = serial_open(port, pinfo, &pgm->fd)) < 0)
     return rc;
@@ -3295,7 +3307,7 @@ static void jtagmkII_close32(PROGRAMMER *pgm) {
   unsigned char *resp, buf[3], c;
   unsigned long val = 0;
 
-  pmsg_notice2("jtagmkII_close32()\n");
+  pmsg_notice2("%s()\n", __func__);
 
   // AVR32 "special"
   buf[0] = CMND_SET_PARAMETER;
@@ -3349,7 +3361,7 @@ static int jtagmkII_paged_load32(const PROGRAMMER *pgm, const AVRPART *p_unused,
   unsigned long val = 0;
   long otimeout = serial_recv_timeout;
 
-  pmsg_notice2("jtagmkII_paged_load32(.., %s, %d, %d)\n", m->desc, page_size, n_bytes);
+  pmsg_notice2("%s(..., %s, %d, %d)\n", __func__, m->desc, page_size, n_bytes);
 
   serial_recv_timeout = 256;
 
@@ -3375,7 +3387,7 @@ static int jtagmkII_paged_load32(const PROGRAMMER *pgm, const AVRPART *p_unused,
   cmd[2] = 0x05;
 
   for(; addr < maxaddr; addr += block_size) {
-    block_size = maxaddr - addr < (unsigned int) pgm->page_size? maxaddr - addr: (unsigned int) pgm->page_size;
+    block_size = minm(maxaddr - addr, (unsigned int) pgm->page_size);
     pmsg_debug("%s(): block_size at addr %d is %d\n", __func__, addr, block_size);
 
     u32_to_b4r(cmd + 3, m->offset + addr);
@@ -3477,7 +3489,7 @@ static int jtagmkII_paged_write32(const PROGRAMMER *pgm, const AVRPART *p_unused
       gotoerr;
 
     for(blocks = 0; blocks < 2; ++blocks) {
-      block_size = maxaddr - addr < (unsigned int) pgm->page_size? maxaddr - addr: (unsigned int) pgm->page_size;
+      block_size = minm(maxaddr - addr, (unsigned int) pgm->page_size);
       pmsg_debug("%s(): block_size at addr %d is %d\n", __func__, addr, block_size);
 
       u32_to_b4r(cmd + 6, m->offset + addr);
@@ -3734,7 +3746,7 @@ void jtagmkII_initpgm(PROGRAMMER *pgm) {
   pgm->flag = PGM_FL_IS_JTAG;
 }
 
-const char jtagmkII_dw_desc[] = "Atmel JTAG ICE mkII in debugWire mode";
+const char jtagmkII_dw_desc[] = "Atmel JTAG ICE mkII in debugWIRE mode";
 
 void jtagmkII_dw_initpgm(PROGRAMMER *pgm) {
   pgm->ptyp = "JTAGMKII_DW";
@@ -3854,7 +3866,7 @@ void jtagmkII_dragon_initpgm(PROGRAMMER *pgm) {
   pgm->flag = PGM_FL_IS_JTAG;
 }
 
-const char jtagmkII_dragon_dw_desc[] = "Atmel AVR Dragon in debugWire mode";
+const char jtagmkII_dragon_dw_desc[] = "Atmel AVR Dragon in debugWIRE mode";
 
 void jtagmkII_dragon_dw_initpgm(PROGRAMMER *pgm) {
   pgm->ptyp = "DRAGON_DW";

@@ -135,56 +135,8 @@ static const struct command cmd[] = {
 
 #define spi_mode (cx->term_spi_mode)
 
-static int hexdump_line(char *buffer, unsigned char *p, int n, int pad) {
-  char *hexdata = "0123456789abcdef";
-  char *b = buffer;
-  int i = 0;
-  int j = 0;
-
-  for(i = 0; i < n; i++) {
-    if(i && ((i%8) == 0))
-      b[j++] = ' ';
-    b[j++] = hexdata[(p[i] & 0xf0) >> 4];
-    b[j++] = hexdata[(p[i] & 0x0f)];
-    if(i < 15)
-      b[j++] = ' ';
-  }
-
-  for(i = j; i < pad; i++)
-    b[i] = ' ';
-
-  b[i] = 0;
-
-  for(i = 0; i < pad; i++) {
-    if(!((b[i] == '0') || (b[i] == ' ')))
-      return 0;
-  }
-
-  return 1;
-}
-
-static int chardump_line(char *buffer, unsigned char *p, int n, int pad) {
-  int i;
-  unsigned char b[128];
-
-  // Sanity check
-  n = n < 1? 1: n > (int) sizeof b? (int) sizeof b: n;
-
-  memcpy(b, p, n);
-  for(int i = 0; i < n; i++)
-    buffer[i] = isascii(b[i]) && isspace(b[i])? ' ': isascii(b[i]) && isgraph(b[i])? b[i]: '.';
-
-  for(i = n; i < pad; i++)
-    buffer[i] = ' ';
-
-  buffer[i] = 0;
-
-  return 0;
-}
-
-static int hexdump_buf(const FILE *f, const AVRMEM *m, int startaddr, const unsigned char *buf, int len) {
-  char dst1[80];
-  char dst2[80];
+static int hexdump_buf(const AVRMEM *m, int startaddr, const unsigned char *buf, int len) {
+  char dst[72];
 
   int addr = startaddr;
   unsigned char *p = (unsigned char *) buf;
@@ -197,9 +149,8 @@ static int hexdump_buf(const FILE *f, const AVRMEM *m, int startaddr, const unsi
     if(addr + n > m->size)
       n = m->size - addr;
 
-    hexdump_line(dst1, p, n, 48);
-    chardump_line(dst2, p, n, 16);
-    term_out("%0*x  %s  |%s|\n", m->size > 0x10000? 5: 4, addr, dst1, dst2);
+    str_hexdump16(dst, p, n);
+    term_out("%0*x  %s\n", m->size > 0x10000? 5: 4, addr, dst);
     len -= n;
     addr += n;
     if(addr >= m->size)
@@ -235,7 +186,7 @@ static int disasm_ison(char c) {
   case 'u':
     return !!cx->dis_opts.unused_labels;
   case 'd':
-    return cx->dis_opts.avrlevel == (PART_ALL | OP_AVR_ILL);
+    return cx->dis_opts.isa == OP_All;
   }
   return 0;
 }
@@ -336,7 +287,7 @@ static unsigned char *readbuf(const PROGRAMMER *pgm, const AVRPART *p, int argc,
       cx->term_rmem[mi].mem = mem;
     if(cx->term_rmem[mi].mem == mem) {
       if(cx->term_rmem[mi].len <= 0)
-        cx->term_rmem[mi].len = maxsize > default_len? default_len: maxsize;
+        cx->term_rmem[mi].len = minm(maxsize, default_len);
       else if(cx->term_rmem[mi].len > maxsize)
         cx->term_rmem[mi].len = maxsize;
       if(cx->term_rmem[mi].addr < 0 || cx->term_rmem[mi].addr >= maxsize)
@@ -424,7 +375,7 @@ static unsigned char *readbuf(const PROGRAMMER *pgm, const AVRPART *p, int argc,
       toread = maxsize - whence;
     int gap = maxsize - whence - toread;
 
-    after = gap >= 16? 16: gap < 0? 0: gap;
+    after = cliptom(gap, 0, 16);
     toread += after;
     if(toread - before < 2)     // Cannot disassemble just one byte
       goto nocontent;
@@ -499,7 +450,7 @@ static int cmd_dump(const PROGRAMMER *pgm, const AVRPART *p, int argc, const cha
   if(!buf)
     return -1;
 
-  hexdump_buf(stdout, mem, addr, buf, len);
+  hexdump_buf(mem, addr, buf, len);
   lterm_out("");
   mmt_free(buf);
 
@@ -525,7 +476,7 @@ static int cmd_disasm(const PROGRAMMER *pgm, const AVRPART *p, int argc, const c
     cx->dis_opts.labels = 1;
     cx->dis_opts.unused_labels = 1;
     cx->dis_opts.tagfile = NULL;
-    cx->dis_opts.avrlevel = avr_get_archlevel(p);
+    cx->dis_opts.isa = avr_get_instruction_set(p);
     disasm_init(p);
     cx->dis_initopts++;
   }
@@ -596,10 +547,10 @@ static int cmd_disasm(const PROGRAMMER *pgm, const AVRPART *p, int argc, const c
           disasm_zap_jumpcalls();
           break;
         case 'd':
-          cx->dis_opts.avrlevel = PART_ALL | OP_AVR_ILL;
+          cx->dis_opts.isa = OP_All;
           break;
         case 'D':
-          cx->dis_opts.avrlevel = avr_get_archlevel(p);
+          cx->dis_opts.isa = avr_get_instruction_set(p);
           break;
         case 't':
           if(*++q == '=')
@@ -1022,7 +973,7 @@ done:
   mmt_free(seglist);
   mmt_free(filename);
 
-  return ret < 0? ret: 0;
+  return minm(ret, 0);
 }
 
 static int cmd_backup(const PROGRAMMER *pgm, const AVRPART *p, int argc, const char *argv[]) {
@@ -1628,8 +1579,8 @@ static void printproperty(Cnfg *cc, int ii, Cfg_opts o) {
       if(vt[j].value > o.vmax)
         o.vmax = vt[j].value;
       llen = strlen(vt[j].label);
-      lmin = llen < lmin? llen: lmin;
-      lmax = llen > lmax? llen: lmax;
+      lmin = minm(llen, lmin);
+      lmax = maxm(llen, lmax);
     }
   }
   llen = lmax <= lmin + MAX_PAD? lmax: 1;     // Align label width if max and min length are similar
@@ -1913,9 +1864,9 @@ static int cmd_config(const PROGRAMMER *pgm, const AVRPART *p, int argc, const c
       for(int j = 0; j < nv; j++) {
         if(vj == -1 || (str_starts(vt[j].label, rhs) || str_match(rhs, vt[j].label))) {
           llen = strlen(vt[j].label);
-          lmin = llen < lmin? llen: lmin;
-          lmax = llen > lmax? llen: lmax;
-          o.vmax = vt[j].value > o.vmax? vt[j].value: o.vmax;
+          lmin = minm(llen, lmin);
+          lmax = maxm(llen, lmax);
+          o.vmax = maxm(vt[j].value, o.vmax);
         }
       }
       llen = lmax <= lmin + MAX_PAD? lmax: 1; // Align label width if max and min length are similar
@@ -3113,7 +3064,7 @@ static void update_progress_tty(int percent, double etime, const char *hdr, int 
     cx->term_header = mmt_strdup(hdr);
   }
 
-  percent = percent > 100? 100: percent < 0? 0: percent;
+  percent = cliptom(percent, 0, 100);
 
   if(cx->term_tty_todo) {
     if(!cx->term_header)
@@ -3144,7 +3095,7 @@ static void update_progress_tty(int percent, double etime, const char *hdr, int 
 static void update_progress_no_tty(int percent, double etime, const char *hdr, int finish) {
   setvbuf(stderr, (char *) NULL, _IONBF, 0);
 
-  percent = percent > 100? 100: percent < 0? 0: percent;
+  percent = cliptom(percent, 0, 100);
 
   if(hdr) {
     lmsg_info("%s | ", hdr);

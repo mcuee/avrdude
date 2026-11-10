@@ -48,6 +48,7 @@ static int assign_pin(int pinfunc, TOKEN *v, int invert);
 static int assign_pin_list(int invert);
 static int which_opcode(TOKEN *opcode);
 static int parse_cmdbits(OPCODE *op, int opnum);
+static int in_systemconfig(void);
 
 #define pin_name (cx->cfgy_pin_name)
 %}
@@ -94,6 +95,7 @@ static int parse_cmdbits(OPCODE *op, int opnum);
 %token K_LOADPAGE
 %token K_SDI
 %token K_SDO
+%token K_MODIFY
 %token K_PARALLEL
 %token K_PARENT
 %token K_PART
@@ -259,7 +261,7 @@ prog_def :
     {
       PROGRAMMER *existing_prog;
       if(lsize(current_prog->id) == 0) {
-        yyerror("required parameter id not specified");
+        yyerror("required programmer parameter id not specified");
         YYABORT;
       }
       if(current_prog->initpgm == NULL && current_prog->prog_modes) {
@@ -288,13 +290,18 @@ prog_def :
       current_prog = NULL;
       current_strct = COMP_CONFIG_MAIN;
     }
+  | prog_modify prog_parms {
+    modify_comments(&current_prog->comments, cfg_move_comments());
+    current_prog = NULL;
+    current_strct = COMP_CONFIG_MAIN;
+  }
 ;
 
 
 prog_decl :
   K_PROGRAMMER
     { current_prog = pgm_new();
-      current_prog->config_file = cache_string(cfg_infile);
+      current_prog->config_file = cache_string(cfg_infile? cfg_infile: "unknown");
       current_prog->lineno = cfg_lineno;
     }
     |
@@ -309,12 +316,27 @@ prog_decl :
       current_prog = pgm_dup(pgm);
       current_prog->parent_id = cache_string($3->value.string);
       current_prog->comments = NULL;
-      current_prog->config_file = cache_string(cfg_infile);
+      current_prog->config_file = cache_string(cfg_infile? cfg_infile: "unknown");
       current_prog->lineno = cfg_lineno;
       free_token($3);
     }
 ;
 
+prog_modify:
+  K_MODIFY K_PROGRAMMER TKN_STRING {
+    if(in_systemconfig()) {
+      free_token($3);
+      YYABORT;
+    }
+    current_prog = locate_programmer(programmers, $3->value.string);
+    if(!current_prog) {
+      yyerror("to be modified programmer %s not found", $3->value.string);
+      free_token($3);
+      YYABORT;
+    }
+    free_token($3);
+  }
+;
 
 part_def :
   part_decl part_parms
@@ -324,7 +346,7 @@ part_def :
       AVRPART *existing_part;
 
       if(current_part->id[0] == 0) {
-        yyerror("required parameter id not specified");
+        yyerror("required part parameter id not specified");
         YYABORT;
       }
 
@@ -378,6 +400,10 @@ part_def :
           yywarning("revise fileio_mem_offset(), avrdude.conf entry or memory type assignment");
       }
 
+      // Sort memories in canonical order
+      if(current_part->mem)
+        lsort(current_part->mem, avr_mem_cmp);
+
       existing_part = locate_part(part_list, current_part->id);
       if(existing_part) {
         { /* temporarily set lineno to lineno of part start */
@@ -396,13 +422,18 @@ part_def :
       current_part = NULL;
       current_strct = COMP_CONFIG_MAIN;
     }
+  | part_modify part_parms {
+    modify_comments(&current_part->comments, cfg_move_comments());
+    current_part = NULL;
+    current_strct = COMP_CONFIG_MAIN;
+  }
 ;
 
 part_decl :
   K_PART
     {
       current_part = avr_new_part();
-      current_part->config_file = cache_string(cfg_infile);
+      current_part->config_file = cache_string(cfg_infile? cfg_infile: "unknown");
       current_part->lineno = cfg_lineno;
     } |
   K_PART K_PARENT TKN_STRING
@@ -417,11 +448,27 @@ part_decl :
       current_part = avr_dup_part(parent_part);
       current_part->parent_id = cache_string($3->value.string);
       current_part->comments = NULL;
-      current_part->config_file = cache_string(cfg_infile);
+      current_part->config_file = cache_string(cfg_infile? cfg_infile: "unknown");
       current_part->lineno = cfg_lineno;
 
       free_token($3);
     }
+;
+
+part_modify:
+  K_MODIFY K_PART TKN_STRING {
+    if(in_systemconfig()) {
+      free_token($3);
+      YYABORT;
+    }
+    current_part = locate_part(part_list, $3->value.string);
+    if(!current_part) {
+      yyerror("to be modified part %s not found", $3->value.string);
+      free_token($3);
+      YYABORT;
+    }
+    free_token($3);
+  }
 ;
 
 string_list :
@@ -950,7 +997,7 @@ part_parm :
         unsigned char cmd[4] = { 0, 0, 0, 0, };
         int bn;
 
-        for(int i=0; i<AVR_OP_MAX; i++)
+        for(int i = 0; i < AVR_OP_MAX; i++)
           if(current_mem && current_mem->op[i]) {
             if((bn = avr_set_addr_mem(current_mem, i, cmd, 0UL)) > 0)
               yywarning("%s's %s %s misses a necessary address bit a%d",
@@ -1027,7 +1074,7 @@ mem_spec :
     {
       int ps = $3->value.number;
       if(ps <= 0)
-        pmsg_warning("invalid page size %d, ignored [%s:%d]\n", ps, cfg_infile, cfg_lineno);
+        pmsg_warning("invalid page size %d, ignored [%s:%d]\n", ps, cfg_infile? cfg_infile: "unknown", cfg_lineno);
       else
         current_mem->page_size = ps;
       free_token($3);
@@ -1337,4 +1384,14 @@ static int parse_cmdbits(OPCODE *op, int opnum) {
     yywarning("too few opcode bits in instruction");
 
   return rv;
+}
+
+static int in_systemconfig(void) {
+  char *sysconfig = str_sysconfig();
+  int ret = !cfg_infile || str_eq(cfg_infile, sysconfig);
+  mmt_free(sysconfig);
+
+  if(ret)
+    yyerror("modify operation %s configuration file", !cfg_infile? "without obvious": "not allowd in system");
+  return ret;
 }

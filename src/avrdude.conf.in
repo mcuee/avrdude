@@ -27,8 +27,9 @@ avrdude_conf_version = "@AVRDUDE_FULL_VERSION@";
 #       prog_modes = PM_<i/f> {| PM_<i/f>}        # interfaces, eg, PM_SPM|PM_PDI (1)
 #       is_serialadapter = <yes|no>               # programmer is also a serialadapter
 #       extra_features = HAS_<fea> {| HAS_<fea>}  # extra features, eg, HAS_SUFFER (2)
-#       connection_type = parallel | serial | usb | spi
-#       baudrate = <num> ;                        # baudrate for avr910-programmer
+#       connection_type = parallel | serial | usb | spi | linuxgpio
+#       port     = <port>                         # default port, quoted string
+#       baudrate = <num> ;                        # baudrate for the programmer
 #       vcc      = <pin1> [, <pin2> ... ] ;       # pin number(s) (3)
 #       buff     = <pin1> [, <pin2> ... ] ;       # pin number(s)
 #       reset    = <pin> ;                        # pin number
@@ -46,9 +47,9 @@ avrdude_conf_version = "@AVRDUDE_FULL_VERSION@";
 #       usbvid   = <hexnum> ;                     # USB vendor ID
 #       usbpid   = <hexnum> [, <hexnum> ...] ;    # USB product ID (4)
 #       usbdev   = <interface> ;                  # USB interface or other device info
-#       usbvendor = <vendorname> ;                # USB Vendor Name
-#       usbproduct = <productname> ;              # USB Product Name
-#       usbsn    = <serialno> ;                   # USB Serial Number
+#       usbvendor = <vendorname> ;                # USB vendor name
+#       usbproduct = <productname> ;              # USB product name
+#       usbsn    = <serialno> ;                   # USB serial number
 #       hvupdi_support = <num> [, <num>, ... ] ;  # HV support for enabling UPDI
 #   ;
 #
@@ -97,7 +98,7 @@ avrdude_conf_version = "@AVRDUDE_FULL_VERSION@";
 #       baudrate = <num> ;                        # optional default baudrate, eg, in .avrduderc
 #       usbvid   = <hexnum> ;                     # USB vendor ID
 #       usbpid   = <hexnum> [, <hexnum> ...] ;    # list of USB product IDs
-#       usbsn    = <serialno> ;                   # USB Serial Number in per-user .avrduderc
+#       usbsn    = <serialno> ;                   # USB serial number in per-user .avrduderc
 #   ;
 #
 #   part
@@ -108,10 +109,11 @@ avrdude_conf_version = "@AVRDUDE_FULL_VERSION@";
 #       prog_modes       = PM_<i/f> {| PM_<i/f>}  # interfaces, eg, PM_SPM|PM_ISP|PM_HVPP|PM_debugWIRE
 #       mcuid            = <num>;                 # unique id in 0..2039 for 8-bit AVRs
 #       archnum          = <num>;                 # avr-gcc architecture number; -1 if not 8-bit AVR
+#       instruction_set  = <num>;                 # encodes permitted opcodes; -1 if not 8-bit AVR
 #       n_interrupts     = <num>;                 # number of interrupts, used for vector bootloaders
 #       n_page_erase     = <num>;                 # if set, number of pages erased during SPM erase
-#       n_boot_sections  = <num>;                 # Number of boot sections
-#       boot_section_size = <num>;                # Size of (smallest) boot section, if any
+#       n_boot_sections  = <num>;                 # number of boot sections
+#       boot_section_size = <num>;                # size of (smallest) boot section, if any
 #       hvupdi_variant   = <num> ;                # numeric: -1 or 0..3; how to enable UPDI with HV
 #       stk500_devcode   = <num> ;                # numeric
 #       avr910_devcode   = <num> ;                # numeric
@@ -251,6 +253,13 @@ avrdude_conf_version = "@AVRDUDE_FULL_VERSION@";
 #     indicating that the device needs a power-cycle is printed out.
 #     This flag was added to work around a problem with the
 #     at90s4433/2333's; see the at90s4433 errata at:
+#   * instruction_set refers to the opcodes that a particular AVR can
+#     process; this is only relevant for the disasm terminal command and
+#     does not affect programming of the devices; each bit of the integer
+#     number stands for a set of allowed opcodes or RAMP registers. There
+#     are symbolic values such as ISA_avrxmega103 or ISA_avr35 that
+#     correspond to the avr-gcc instruction set architecture. For more
+#     details see the full AVRDUDE documentation.
 #
 #     https://www.microchip.com/content/dam/mchp/documents/OTH/ProductDocuments/DataSheets/doc1042.pdf
 #
@@ -3890,6 +3899,7 @@ part # .reduced_core_tiny
     id                     = ".reduced_core_tiny";
     prog_modes             = PM_TPI;
     archnum                = 100;
+    instruction_set        = ISA_avrtiny;
 
     memory "fuse"
         size               = 1;
@@ -4210,6 +4220,7 @@ part # .classic-nocal
     id                     = ".classic-nocal";
     prog_modes             = PM_SPM | PM_ISP;
     archnum                = 2;
+    instruction_set        = ISA_avr2;
 
     memory "lock"
         size               = 1;
@@ -4290,6 +4301,7 @@ part parent ".classic" # t11
     prog_modes             = PM_HVSP;
     mcuid                  = 8;
     archnum                = 1;
+    instruction_set        = ISA_avr1;
     n_interrupts           = 5;
     stk500_devcode         = 0x11;
     chip_erase_delay       = 20000;
@@ -4570,7 +4582,7 @@ part parent ".classic-nocal" # t22
         "ATtiny22L-1PI: DIP8,  Fmax=1 MHz, T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]",
         "ATtiny22L-1SC: SOIC8, Fmax=1 MHz, T=[0 C,   70 C], Vcc=[2.7 V, 6 V]",
         "ATtiny22L-1SI: SOIC8, Fmax=1 MHz, T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVSP;
+    prog_modes             = PM_ISP | PM_HVSP;
     mcuid                  = 13;
     n_interrupts           = 3;
     stk500_devcode         = 0x20;
@@ -4633,6 +4645,7 @@ part parent ".classic-nocal" # t22
 
     memory "fuse"
         size               = 1;
+        initval            = 0xde;
         bitmask            = 0x21;
         min_write_delay    = 9000;
         max_write_delay    = 20000;
@@ -4693,6 +4706,7 @@ part parent ".classic" # t13
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 10;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 10;
     stk500_devcode         = 0x14;
     chip_erase_delay       = 4000;
@@ -5163,6 +5177,7 @@ part parent ".classic" # t2313
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 42;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 19;
     stk500_devcode         = 0x23;
 #   Use the ATtiny26 devcode:
@@ -5311,6 +5326,11 @@ part parent "t2313" # t2313a
         "ATtiny2313A-SUR:  SOIC20, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 43;
     n_interrupts           = 21;
+    flash_instr            =  0xb4, 0x07, 0x17;
+    eeprom_instr           =
+        0xbb, 0xfe, 0xbb, 0xee, 0xbb, 0xcc, 0xb2, 0x0d,
+        0xbc, 0x07, 0xb4, 0x07, 0xba, 0x0d, 0xbb, 0xbc,
+        0x99, 0xe1, 0xbb, 0xac;
     idr                    = 0x27;
 
     memory "lfuse"
@@ -5336,6 +5356,11 @@ part parent "t2313" # t4313
     mcuid                  = 44;
     n_interrupts           = 21;
     signature              = 0x1e 0x92 0x0d;
+    flash_instr            =  0xb4, 0x07, 0x17;
+    eeprom_instr           =
+        0xbb, 0xfe, 0xbb, 0xee, 0xbb, 0xcc, 0xb2, 0x0d,
+        0xbc, 0x07, 0xb4, 0x07, 0xba, 0x0d, 0xbb, 0xbc,
+        0x99, 0xe1, 0xbb, 0xac;
     idr                    = 0x27;
 
     memory "eeprom"
@@ -5386,6 +5411,7 @@ part parent ".classic" # t24
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 14;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 17;
 #   no STK500 devcode in XML file, use the ATtiny45 one
     stk500_devcode         = 0x14;
@@ -5700,6 +5726,7 @@ part parent ".classic" # t441
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 32;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 30;
     n_page_erase           = 4;
     stk500_devcode         = 0x14;
@@ -5997,6 +6024,7 @@ part parent ".classic" # t261
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 30;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 19;
     chip_erase_delay       = 4000;
     pagel                  = 0xb3;
@@ -6293,6 +6321,7 @@ part parent ".classic" # t48
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 23;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 20;
     stk500_devcode         = 0x73;
     chip_erase_delay       = 15000;
@@ -6467,6 +6496,7 @@ part parent ".classic" # t28
     prog_modes             = PM_HVPP;
     mcuid                  = 18;
     archnum                = 1;
+    instruction_set        = ISA_avr1;
     n_interrupts           = 6;
     stk500_devcode         = 0x22;
     avr910_devcode         = 0x5c;
@@ -6548,6 +6578,7 @@ part parent ".classic" # t43u
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 19;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 16;
     stk500_devcode         = 0x14;
 #   avr910_devcode         = ?;
@@ -6677,15 +6708,14 @@ part parent ".classic" # t828
     desc                   = "ATtiny828";
     id                     = "t828";
     variants               =
-        "ATtiny828-AU:   TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
-        "ATtiny828-AUR:  TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
-        "ATtiny828-MU:   QFN32,  Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
-        "ATtiny828-MUR:  VQFN32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.62 V, 5.5 V]",
-        "ATtiny828R-AU:  TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.62 V, 5.5 V]",
-        "ATtiny828R-AUR: TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.62 V, 5.5 V]";
+        "ATtiny828-AU:  TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
+        "ATtiny828-AUR: TQFP32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
+        "ATtiny828-MU:  QFN32,  Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.7 V,  5.5 V]",
+        "ATtiny828-MUR: VQFN32, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.62 V, 5.5 V]";
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 35;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 26;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -6837,6 +6867,7 @@ part parent ".classic" # t87
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 27;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 20;
 #   no STK500 devcode in XML file, use the ATtiny45 one
     stk500_devcode         = 0x14;
@@ -6972,6 +7003,7 @@ part parent "t87" # t167
         "ATtiny167-XUR:   TSSOP20, Fmax=16 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 29;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     signature              = 0x1e 0x94 0x87;
 
     memory "flash"
@@ -6989,19 +7021,16 @@ part parent ".classic" # t1634
     desc                   = "ATtiny1634";
     id                     = "t1634";
     variants               =
-        "ATtiny1634-MN:   WQFN20, Fmax=12 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634-MNR:  WQFN20, Fmax=12 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634-MU:   QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634-MUR:  QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634-SU:   SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634-SUR:  SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634R-MU:  QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634R-MUR: QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634R-SU:  SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
-        "ATtiny1634R-SUR: SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
+        "ATtiny1634-MN:  WQFN20, Fmax=12 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]",
+        "ATtiny1634-MNR: WQFN20, Fmax=12 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]",
+        "ATtiny1634-MU:  QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
+        "ATtiny1634-MUR: QFN20,  Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
+        "ATtiny1634-SU:  SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
+        "ATtiny1634-SUR: SOIC20, Fmax=12 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 40;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     n_interrupts           = 28;
     n_page_erase           = 4;
     stk500_devcode         = 0x86;
@@ -7025,11 +7054,11 @@ part parent ".classic" # t1634
         0x4e, 0x5e, 0x4f, 0x5f, 0x6e, 0x7e, 0x6f, 0x7f,
         0x66, 0x76, 0x67, 0x77, 0x6a, 0x7a, 0x6b, 0x7b,
         0xbe, 0xfd, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00;
-    flash_instr            =  0xb6, 0x01, 0x11;
+    flash_instr            =  0xb4, 0x0e, 0x1e;
     eeprom_instr           =
-        0xbd, 0xf2, 0xbd, 0xe1, 0xbb, 0xcf, 0xb4, 0x00,
-        0xbe, 0x01, 0xb6, 0x01, 0xbc, 0x00, 0xbb, 0xbf,
-        0x99, 0xf9, 0xbb, 0xaf;
+        0xbb, 0xff, 0xbb, 0xee, 0xbb, 0xcc, 0xb2, 0x0d,
+        0xbc, 0x0e, 0xb4, 0x0e, 0xba, 0x0d, 0xbb, 0xbc,
+        0x99, 0xe1, 0xbb, 0xac;
     hventerstabdelay       = 100;
     latchcycles            = 5;
     togglevtg              = 1;
@@ -7152,6 +7181,7 @@ part parent ".classic" # c32
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 171;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 37;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -7311,6 +7341,7 @@ part parent "c32" # c128
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 176;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
 #   avr910_devcode         = 0x43;
     signature              = 0x1e 0x97 0x81;
     rampz                  = 0x3b;
@@ -7351,6 +7382,7 @@ part parent ".classic" # pwm81
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 173;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 20;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -7375,9 +7407,9 @@ part parent ".classic" # pwm81
         0xec, 0xbc, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00;
     flash_instr            =  0xb6, 0x01, 0x11;
     eeprom_instr           =
-        0xbd, 0xf2, 0xbd, 0xe1, 0xbb, 0xcf, 0xb4, 0x00,
-        0xbe, 0x01, 0xb6, 0x01, 0xbc, 0x00, 0xbb, 0xbf,
-        0x99, 0xf9, 0xbb, 0xaf;
+        0xbb, 0xff, 0xbb, 0xee, 0xbb, 0xcc, 0xb2, 0x0d,
+        0xbe, 0x01, 0xb6, 0x01, 0xba, 0x0d, 0xbb, 0xbc,
+        0x99, 0xe1, 0xbb, 0xac;
     hventerstabdelay       = 100;
     latchcycles            = 5;
     togglevtg              = 1;
@@ -7481,6 +7513,7 @@ part parent "pwm81" # pwm161
         "AT90PWM161-16SNR: SOIC20, Fmax=16 MHz, T=[N/A,     N/A], Vcc=[2.7 V, 5.5 V]";
     mcuid                  = 177;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     signature              = 0x1e 0x94 0x8b;
 
     memory "flash"
@@ -7513,6 +7546,7 @@ part parent ".classic" # pwm1
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 166;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 32;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -7642,6 +7676,7 @@ part parent ".classic" # pwm2
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 167;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 32;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -7680,8 +7715,10 @@ part parent ".classic" # pwm2
     chiperasepolltimeout   = 10;
     programfusepolltimeout = 5;
     programlockpolltimeout = 5;
+    idr                    = 0x31;
     spmcr                  = 0x57;
     eecr                   = 0x3f;
+    ocdrev                 = 1;
 
     memory "eeprom"
         size               = 512;
@@ -7773,8 +7810,6 @@ part parent "pwm2" # pwm2b
     mcuid                  = 168;
     signature              = 0x1e 0x93 0x83;
     resetdelay             = 15;
-    idr                    = 0x31;
-    ocdrev                 = 1;
 
     memory "eeprom"
         readback           = 0x00 0x00;
@@ -7871,6 +7906,7 @@ part parent ".classic" # pwm216
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 179;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 32;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -8021,6 +8057,7 @@ part parent ".classic" # usb646
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 181;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 38;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -8165,6 +8202,7 @@ part parent "usb646" # usb1286
         "AT90USB1286-MUR: QFN64,  Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[2.7 V, 5.5 V]";
     mcuid                  = 184;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0x97 0x82;
     usbpid                 = 0x2ffb;
     rampz                  = 0x3b;
@@ -8209,6 +8247,7 @@ part parent "usb646" # usb1287
         "AT90USB1287-MUR: VQFN64, Fmax=16 MHz, T=[-40 C, 85 C], Vcc=[2.7 V, 5.5 V]";
     mcuid                  = 185;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0x97 0x82;
     usbpid                 = 0x2ffb;
     rampz                  = 0x3b;
@@ -8251,6 +8290,7 @@ part parent ".classic" # usb82
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 174;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     n_interrupts           = 29;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -8422,9 +8462,10 @@ part parent ".classic-nocal" # 1200
         "AT90S1200A-4SI:  SOIC20, Fmax=4 MHz,  T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]",
         "AT90S1200A-4YC:  SSOP20, Fmax=4 MHz,  T=[0 C,   70 C], Vcc=[2.7 V, 6 V]",
         "AT90S1200A-4YI:  SSOP20, Fmax=4 MHz,  T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 183;
     archnum                = 1;
+    instruction_set        = ISA_avr1;
     n_interrupts           = 4;
     stk500_devcode         = 0x33;
     avr910_devcode         = 0x13;
@@ -8522,7 +8563,7 @@ part parent ".classic-nocal" # 2313
         "AT90S2313-4PI:  DIP20,  Fmax=4 MHz,  T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]",
         "AT90S2313-4SC:  SOIC20, Fmax=4 MHz,  T=[0 C,   70 C], Vcc=[2.7 V, 6 V]",
         "AT90S2313-4SI:  SOIC20, Fmax=4 MHz,  T=[-40 C, 85 C], Vcc=[2.7 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 186;
     n_interrupts           = 11;
     stk500_devcode         = 0x40;
@@ -8615,7 +8656,7 @@ part parent ".classic-nocal" # 2323
         "AT90S2323-10PI: DIP8,  Fmax=10 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]",
         "AT90S2323-10SC: SOIC8, Fmax=10 MHz, T=[0 C,   70 C], Vcc=[4 V, 6 V]",
         "AT90S2323-10SI: SOIC8, Fmax=10 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVSP;
+    prog_modes             = PM_ISP | PM_HVSP;
     mcuid                  = 187;
     n_interrupts           = 3;
     stk500_devcode         = 0x41;
@@ -8735,7 +8776,7 @@ part parent ".classic-nocal" # 2333
         "AT90S2333-8AI: TQFP32, Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]",
         "AT90S2333-8PC: DIP28,  Fmax=8 MHz, T=[0 C,   70 C], Vcc=[4 V, 6 V]",
         "AT90S2333-8PI: DIP28,  Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 188;
     n_interrupts           = 14;
     stk500_devcode         = 0x42;
@@ -8794,6 +8835,7 @@ part parent ".classic-nocal" # 2333
 
     memory "fuse"
         size               = 1;
+        initval            = 0xda;
         bitmask            = 0x3f;
         min_write_delay    = 9000;
         max_write_delay    = 20000;
@@ -8803,7 +8845,6 @@ part parent ".classic-nocal" # 2333
     ;
 
     memory "lock"
-        initval            = -1;
         bitmask            = 0x06;
         min_write_delay    = 9000;
         max_write_delay    = 20000;
@@ -8851,14 +8892,6 @@ part parent "2333" # 4433
         write_lo           = "0100.0000--xxxx.xaaa--aaaa.aaaa--iiii.iiii";
         write_hi           = "0100.1000--xxxx.xaaa--aaaa.aaaa--iiii.iiii";
     ;
-
-    memory "fuse"
-        initval            = 0xda;
-    ;
-
-    memory "lock"
-        initval            = 0xff;
-    ;
 ;
 
 #------------------------------------------------------------
@@ -8881,7 +8914,7 @@ part parent ".classic-nocal" # 4414
         "AT90S4414-8JI: LCC44,  Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V,   6 V]",
         "AT90S4414-8PC: DIP40,  Fmax=8 MHz, T=[0 C,   70 C], Vcc=[4 V,   6 V]",
         "AT90S4414-8PI: DIP40,  Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V,   6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 190;
     n_interrupts           = 13;
     stk500_devcode         = 0x50;
@@ -9015,7 +9048,7 @@ part parent ".classic-nocal" # 4434
         "AT90S4434-8JI: LCC44,  Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]",
         "AT90S4434-8PC: DIP40,  Fmax=8 MHz, T=[0 C,   70 C], Vcc=[4 V, 6 V]",
         "AT90S4434-8PI: DIP40,  Fmax=8 MHz, T=[-40 C, 85 C], Vcc=[4 V, 6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 192;
     n_interrupts           = 17;
     stk500_devcode         = 0x52;
@@ -9158,9 +9191,10 @@ part parent ".classic-nocal" # m103
         "ATmega103-6AI:  TQFP64, Fmax=6 MHz, T=[-40 C, 85 C], Vcc=[4 V,   5.5 V]",
         "ATmega103L-4AC: TQFP64, Fmax=4 MHz, T=[0 C,   70 C], Vcc=[2.7 V, 3.6 V]",
         "ATmega103L-4AI: TQFP64, Fmax=4 MHz, T=[-40 C, 85 C], Vcc=[2.7 V, 3.6 V]";
-    prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
+    prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 84;
     archnum                = 31;
+    instruction_set        = ISA_avr31;
     n_interrupts           = 24;
     stk500_devcode         = 0xb1;
     avr910_devcode         = 0x41;
@@ -9269,6 +9303,7 @@ part parent ".classic-nocal" # m161
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
     mcuid                  = 89;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 21;
     n_boot_sections        = 1;
     boot_section_size      = 1024;
@@ -9404,6 +9439,7 @@ part parent ".classic" # m162
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 90;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 28;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -9531,6 +9567,7 @@ part parent ".classic" # m163
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
     mcuid                  = 91;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 18;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -9669,6 +9706,7 @@ part parent ".classic" # m8515
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
     mcuid                  = 160;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 17;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -9812,6 +9850,7 @@ part parent ".classic" # m8535
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
     mcuid                  = 161;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 21;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -9941,6 +9980,7 @@ part parent ".classic" # m8
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP;
     mcuid                  = 45;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 19;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -10095,6 +10135,7 @@ part parent "m8" # m16
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 49;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 21;
     stk500_devcode         = 0x82;
     avr910_devcode         = 0x74;
@@ -10177,6 +10218,7 @@ part parent "m8" # m32
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 58;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 21;
     boot_section_size      = 512;
     stk500_devcode         = 0x91;
@@ -10274,6 +10316,7 @@ part parent "m8" # m64
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 72;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 35;
     boot_section_size      = 1024;
     stk500_devcode         = 0xa0;
@@ -10382,6 +10425,7 @@ part parent "m8" # m128
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 85;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     n_interrupts           = 35;
     boot_section_size      = 1024;
     stk500_devcode         = 0xb2;
@@ -10491,6 +10535,7 @@ part parent ".classic" # m640
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 126;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 57;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -10624,6 +10669,7 @@ part parent "m640" # m1280
         "ATmega1280V-8CU:  CBGA100, Fmax=8 MHz,  T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 138;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0x97 0x03;
     rampz                  = 0x3b;
 
@@ -10656,6 +10702,7 @@ part parent "m640" # m1281
         "ATmega1281V-8MUR: MLF64,  Fmax=8 MHz,  T=[N/A,    N/A], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 139;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0x97 0x04;
     rampz                  = 0x3b;
 
@@ -10685,6 +10732,7 @@ part parent "m640" # m2560
         "ATmega2560V-8CU:  CBGA100, Fmax=8 MHz,  T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 143;
     archnum                = 6;
+    instruction_set        = ISA_avr6;
     stk500_devcode         = 0xb2;
     signature              = 0x1e 0x98 0x01;
     pp_controlstack        =
@@ -10726,6 +10774,7 @@ part parent "m640" # m2561
         "ATmega2561V-8MUR: VQFN64, Fmax=8 MHz,  T=[N/A,    N/A], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 144;
     archnum                = 6;
+    instruction_set        = ISA_avr6;
     stk500_devcode         = 0xb2;
     signature              = 0x1e 0x98 0x02;
     pp_controlstack        =
@@ -10779,6 +10828,7 @@ part parent ".classic" # m164p
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 93;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 31;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -11210,6 +11260,7 @@ part parent "m164p" # m1284
         "ATmega1284-PU:  PDIP40, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 140;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     n_interrupts           = 35;
     boot_section_size      = 1024;
     signature              = 0x1e 0x97 0x06;
@@ -11288,6 +11339,7 @@ part parent ".classic" # m128rfa1
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 87;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     n_interrupts           = 72;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -11420,6 +11472,7 @@ part parent ".classic" # m644rfr2
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 131;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 77;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -11573,6 +11626,7 @@ part parent "m644rfr2" # m1284rfr2
         "ATmega1284RFR2-ZUR: VFQFN48, Fmax=16 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 3.6 V]";
     mcuid                  = 142;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0xa7 0x03;
 
     memory "eeprom"
@@ -11609,6 +11663,7 @@ part parent "m644rfr2" # m2564rfr2
         "ATmega2564RFR2-ZUR: VFQFN48, Fmax=16 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 3.6 V]";
     mcuid                  = 145;
     archnum                = 6;
+    instruction_set        = ISA_avr6;
     signature              = 0x1e 0xa8 0x03;
     ocdrev                 = 4;
 
@@ -11648,6 +11703,7 @@ part parent ".classic" # m64rfr2
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 78;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 77;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -11801,6 +11857,7 @@ part parent "m64rfr2" # m128rfr2
         "ATmega128RFR2-ZUR: VFQFN64, Fmax=16 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 3.6 V]";
     mcuid                  = 88;
     archnum                = 51;
+    instruction_set        = ISA_avr51;
     signature              = 0x1e 0xa7 0x02;
 
     memory "eeprom"
@@ -11837,6 +11894,7 @@ part parent "m64rfr2" # m256rfr2
         "ATmega256RFR2-ZUR: VFQFN64, Fmax=16 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 3.6 V]";
     mcuid                  = 108;
     archnum                = 6;
+    instruction_set        = ISA_avr6;
     signature              = 0x1e 0xa8 0x02;
     ocdrev                 = 4;
 
@@ -11881,6 +11939,7 @@ part parent ".classic" # m165
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 95;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 22;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -12551,6 +12610,7 @@ part parent ".classic" # m48
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 67;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 26;
     stk500_devcode         = 0x59;
     chip_erase_delay       = 45000;
@@ -12893,6 +12953,7 @@ part parent "m48" # m168
         "ATmega168V-10PU:  PDIP28, Fmax=10 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 99;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_boot_sections        = 4;
     boot_section_size      = 256;
     stk500_devcode         = 0x86;
@@ -13024,6 +13085,7 @@ part parent "m48" # m328
         "ATmega328-PU:   PDIP28, Fmax=20 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 118;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_boot_sections        = 4;
     boot_section_size      = 512;
     stk500_devcode         = 0x86;
@@ -13213,6 +13275,7 @@ part parent ".classic" # m169
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG | PM_JTAGmkI;
     mcuid                  = 104;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 23;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -13918,6 +13981,7 @@ part parent ".classic" # m8hva
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 47;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 21;
     chip_erase_delay       = 4000;
     signature              = 0x1e 0x93 0x10;
@@ -14028,6 +14092,7 @@ part parent "m8hva" # m16hva
         "ATmega16HVA-4TUR:  TSSOP28, Fmax=4 MHz, T=[-20 C, 85 C], Vcc=[1.8 V, 9 V]";
     mcuid                  = 51;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     signature              = 0x1e 0x94 0x0c;
 
     memory "flash"
@@ -14052,6 +14117,7 @@ part parent ".classic" # m32hve2
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 379;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 25;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -14173,6 +14239,7 @@ part parent ".classic" # m64hve2
     prog_modes             = PM_SPM | PM_ISP | PM_HVSP | PM_debugWIRE;
     mcuid                  = 77;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 25;
     n_boot_sections        = 4;
     boot_section_size      = 1024;
@@ -14294,6 +14361,7 @@ part parent ".classic" # m16hvb
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 52;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 29;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -14468,6 +14536,7 @@ part parent ".classic" # m16m1
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 54;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 31;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -14761,6 +14830,7 @@ part parent ".classic" # m8u2
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 48;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     n_interrupts           = 29;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -14947,6 +15017,7 @@ part parent ".classic" # m16u4
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_JTAG;
     mcuid                  = 57;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 43;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -15113,6 +15184,7 @@ part parent ".classic" # m406
     prog_modes             = PM_SPM | PM_HVPP | PM_JTAG;
     mcuid                  = 125;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 23;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -15208,6 +15280,7 @@ part parent ".classic" # a6612c
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 216;
     archnum                = 4;
+    instruction_set        = ISA_avr4;
     n_interrupts           = 26;
     n_boot_sections        = 4;
     boot_section_size      = 256;
@@ -15336,6 +15409,7 @@ part parent "a6612c" # a6613c
         "ATA6613C-PLQW-1: VFQFN48, Fmax=16 MHz, T=[-40 C, 125 C], Vcc=[2.7 V, 5.5 V]";
     mcuid                  = 217;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     stk500_devcode         = 0x86;
     chip_erase_delay       = 9000;
     signature              = 0x1e 0x94 0x06;
@@ -15371,6 +15445,7 @@ part parent ".classic" # a6616c
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 219;
     archnum                = 25;
+    instruction_set        = ISA_avr25;
     n_interrupts           = 20;
     stk500_devcode         = 0x14;
     avr910_devcode         = 0x20;
@@ -15497,6 +15572,7 @@ part parent "a6616c" # a6617c
         "ATA6617C-P3QW-1: VFQFN38, Fmax=16 MHz, T=[-40 C, 125 C], Vcc=[2.7 V, 5.5 V]";
     mcuid                  = 220;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     signature              = 0x1e 0x94 0x87;
 
     memory "flash"
@@ -15521,6 +15597,7 @@ part parent ".classic" # a5505
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 198;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     n_interrupts           = 20;
     stk500_devcode         = 0x14;
     avr910_devcode         = 0x20;
@@ -15648,6 +15725,7 @@ part parent ".classic" # a6614q
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 218;
     archnum                = 5;
+    instruction_set        = ISA_avr5;
     n_interrupts           = 26;
     n_boot_sections        = 4;
     boot_section_size      = 512;
@@ -15774,6 +15852,7 @@ part parent ".classic" # a664251
     prog_modes             = PM_SPM | PM_ISP | PM_HVPP | PM_debugWIRE;
     mcuid                  = 225;
     archnum                = 35;
+    instruction_set        = ISA_avr35;
     n_interrupts           = 20;
     stk500_devcode         = 0x14;
     avr910_devcode         = 0x20;
@@ -15997,6 +16076,7 @@ part # 89S51
     prog_modes             = PM_ISP | PM_HVPP;
     mcuid                  = 372;
     archnum                = -1; # Not 8-bit AVR
+    instruction_set        = -1;
     stk500_devcode         = 0xe0;
     chip_erase_delay       = 250000;
     signature              = 0x1e 0x51 0x06;
@@ -16312,6 +16392,7 @@ part parent ".xmega-ab" # x16a4u
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 232;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x94 0x41;
@@ -16360,6 +16441,7 @@ part parent ".xmega-cd" # x16c4
         "ATxmega16C4-MHR: VQFN44,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 233;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x94 0x43;
@@ -16413,6 +16495,7 @@ part parent ".xmega-cd" # x16d4
         "ATxmega16D4-MHR: VQFN44,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 234;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 91;
     boot_section_size      = 4096;
     signature              = 0x1e 0x94 0x42;
@@ -16465,6 +16548,7 @@ part parent ".xmega-ab" # x16a4
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 231;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES;
     n_interrupts           = 94;
     boot_section_size      = 4096;
     signature              = 0x1e 0x94 0x41;
@@ -16518,6 +16602,7 @@ part parent ".xmega-ab" # x32a4u
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 239;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x41;
@@ -16566,6 +16651,7 @@ part parent ".xmega-cd" # x32c4
         "ATxmega32C4-MHR: VQFN44,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 240;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x44;
@@ -16620,6 +16706,7 @@ part parent ".xmega-cd" # x32d4
         "ATxmega32D4-MHR: VQFN44,  Fmax=N/A,    T=[N/A,     N/A], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 241;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 91;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x42;
@@ -16672,6 +16759,7 @@ part parent ".xmega-ab" # x32a4
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 238;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES;
     n_interrupts           = 94;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x41;
@@ -16724,6 +16812,7 @@ part parent ".xmega-ab" # x64a4u
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 252;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x46;
@@ -16757,6 +16846,7 @@ part parent ".xmega-cd" # x32c3
         "ATxmega32C3-MHR: VQFN64, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 236;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x49;
@@ -16808,6 +16898,7 @@ part parent ".xmega-cd" # x32d3
         "ATxmega32D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 237;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 114;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x4a;
@@ -16859,6 +16950,7 @@ part parent ".xmega-cd" # x64c3
         "ATxmega64C3-MHR: VQFN64, Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 249;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x49;
@@ -16891,6 +16983,7 @@ part parent ".xmega-cd" # x64d3
         "ATxmega64D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 250;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 114;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x4a;
@@ -16923,6 +17016,7 @@ part parent ".xmega-cd" # x64d4
         "ATxmega64D4-MHR: VQFN44,  Fmax=N/A,    T=[N/A,     N/A], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 253;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 91;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x47;
@@ -16953,6 +17047,7 @@ part parent ".xmega-ab" # x64a1
         "ATxmega64A1-CUR:  BGA100,   Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 243;
     archnum                = 105;
+    instruction_set        = ISA_avrxmega5 | OP_DES;
     n_interrupts           = 125;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x4e;
@@ -16983,6 +17078,7 @@ part parent ".xmega-ab" # x64a1u
         "ATxmega64A1U-CUR:  TFBGA100, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 244;
     archnum                = 105;
+    instruction_set        = ISA_avrxmega5 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x4e;
@@ -17014,6 +17110,7 @@ part parent ".xmega-ab" # x64a3
         "ATxmega64A3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 246;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES;
     n_interrupts           = 122;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x42;
@@ -17043,6 +17140,7 @@ part parent ".xmega-ab" # x64a3u
         "ATxmega64A3U-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 247;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x42;
@@ -17064,6 +17162,7 @@ part parent ".xmega-ab" # x64a4
         "ATxmega64A4: N/A, Fmax=N/A, T=[N/A, N/A], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 251;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES;
     n_interrupts           = 125;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x46;
@@ -17091,6 +17190,7 @@ part parent ".xmega-ab" # x64b1
         "ATxmega64B1-CUR: TQFP100,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 245;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES | OP_RMW;
     n_interrupts           = 81;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x52;
@@ -17122,6 +17222,7 @@ part parent ".xmega-ab" # x64b3
         "ATxmega64B3-MH:  QFN64,   Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 248;
     archnum                = 104;
+    instruction_set        = ISA_avrxmega4 | OP_DES | OP_RMW;
     n_interrupts           = 54;
     boot_section_size      = 4096;
     signature              = 0x1e 0x96 0x51;
@@ -17156,6 +17257,7 @@ part parent ".xmega-cd" # x128c3
         "ATxmega128C3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 261;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x52;
@@ -17214,6 +17316,7 @@ part parent ".xmega-cd" # x128d3
         "ATxmega128D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 262;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6;
     n_interrupts           = 114;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x48;
@@ -17273,6 +17376,7 @@ part parent ".xmega-cd" # x128d4
         "ATxmega128D4-MHR: VQFN44,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 265;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6;
     n_interrupts           = 91;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x47;
@@ -17329,6 +17433,7 @@ part parent ".xmega-ab" # x128a1
         "ATxmega128A1-CUR:  BGA100,   Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 254;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES;
     n_interrupts           = 125;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x4c;
@@ -17398,6 +17503,7 @@ part parent ".xmega-ab" # x128a1u
         "ATxmega128A1U-CUR:  CBGA100,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 256;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x4c;
@@ -17456,6 +17562,7 @@ part parent ".xmega-ab" # x128a3
         "ATxmega128A3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 258;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES;
     n_interrupts           = 122;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x42;
@@ -17512,6 +17619,7 @@ part parent ".xmega-ab" # x128a3u
         "ATxmega128A3U-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 259;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x42;
@@ -17560,6 +17668,7 @@ part parent ".xmega-ab" # x128a4
         "ATxmega128A4: N/A, Fmax=N/A, T=[N/A, N/A], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 263;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x46;
 
@@ -17621,6 +17730,7 @@ part parent ".xmega-ab" # x128a4u
     prog_modes             = PM_SPM | PM_PDI;
     mcuid                  = 264;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x46;
@@ -17670,6 +17780,7 @@ part parent ".xmega-ab" # x128b1
         "ATxmega128B1-CUR: TFBGA100, Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 257;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 81;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x4d;
@@ -17722,6 +17833,7 @@ part parent ".xmega-ab" # x128b3
         "ATxmega128B3-MHR:  QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 260;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 54;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x4b;
@@ -17772,6 +17884,7 @@ part parent ".xmega-cd" # x192c3
         "ATxmega192C3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 269;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x51;
@@ -17829,6 +17942,7 @@ part parent ".xmega-cd" # x192d3
         "ATxmega192D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 270;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6;
     n_interrupts           = 114;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x49;
@@ -17882,6 +17996,7 @@ part parent ".xmega-ab" # x192a1
         "ATxmega192A1-CU: CBGA100, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 266;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x4e;
@@ -17943,6 +18058,7 @@ part parent ".xmega-ab" # x192a3
         "ATxmega192A3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 267;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES;
     n_interrupts           = 122;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x44;
@@ -18000,6 +18116,7 @@ part parent ".xmega-ab" # x192a3u
         "ATxmega192A3U-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 268;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x97 0x44;
@@ -18053,6 +18170,7 @@ part parent ".xmega-cd" # x256c3
         "ATxmega256C3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 276;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x46;
@@ -18115,6 +18233,7 @@ part parent ".xmega-cd" # x256d3
         "ATxmega256D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 277;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6;
     n_interrupts           = 114;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x44;
@@ -18172,6 +18291,7 @@ part parent ".xmega-ab" # x256a1
         "ATxmega256A1-CU: CBGA100, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 271;
     archnum                = 107;
+    instruction_set        = ISA_avrxmega7 | OP_DES;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x46;
@@ -18237,6 +18357,7 @@ part parent ".xmega-ab" # x256a3
         "ATxmega256A3-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 272;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES;
     n_interrupts           = 122;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x42;
@@ -18298,6 +18419,7 @@ part parent ".xmega-ab" # x256a3u
         "ATxmega256A3U-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 275;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x42;
@@ -18353,6 +18475,7 @@ part parent ".xmega-ab" # x256a3b
         "ATxmega256A3B-MHR: QFN64,  Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 273;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES;
     n_interrupts           = 122;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x43;
@@ -18411,6 +18534,7 @@ part parent ".xmega-ab" # x256a3bu
         "ATxmega256A3BU-MHR: VQFN64, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 274;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x43;
@@ -18468,6 +18592,7 @@ part parent ".xmega-cd" # x384c3
         "ATxmega384C3-MHR: VQFN64, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 278;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6 | OP_DES | OP_RMW;
     n_interrupts           = 127;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x45;
@@ -18528,6 +18653,7 @@ part parent ".xmega-cd" # x384d3
         "ATxmega384D3-MN:  QFN64,  Fmax=32 MHz, T=[-40 C, 105 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 279;
     archnum                = 106;
+    instruction_set        = ISA_avrxmega6;
     n_interrupts           = 114;
     boot_section_size      = 8192;
     signature              = 0x1e 0x98 0x47;
@@ -18593,6 +18719,7 @@ part parent ".xmega-e" # x8e5
         "ATxmega8E5-MUR:  VQFN32, Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 230;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     boot_section_size      = 2048;
     signature              = 0x1e 0x93 0x41;
 
@@ -18644,6 +18771,7 @@ part parent ".xmega-e" # x16e5
         "ATxmega16E5-MUR:  VQFN32, Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 235;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     boot_section_size      = 4096;
     signature              = 0x1e 0x94 0x45;
 
@@ -18693,6 +18821,7 @@ part parent ".xmega-e" # x32e5
         "ATxmega32E5-MUR:  VQFN32, Fmax=32 MHz, T=[-40 C,  85 C], Vcc=[1.6 V, 3.6 V]";
     mcuid                  = 242;
     archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     boot_section_size      = 4096;
     signature              = 0x1e 0x95 0x4c;
 
@@ -18741,6 +18870,7 @@ part # uc3a0512
         "AT32UC3A0512AU-ALUT:  LQFP144,  Fmax=66 MHz, T=[-40 C, 85 C], Vcc=[1.65 V, 3.6 V]";
     prog_modes             = PM_AVR32JTAG | PM_aWire;
     archnum                = -1; # Not 8-bit AVR
+    instruction_set        = -1;
     signature              = 0xed 0xc0 0x3f;
 
     memory "flash"
@@ -18996,6 +19126,7 @@ part parent ".avr8x_tiny" # t202
         "ATtiny202-SSNR: SOIC8, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 280;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x91 0x23;
 
@@ -19048,6 +19179,7 @@ part parent ".avr8x_tiny" # t204
         "ATtiny204-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 281;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x91 0x22;
 
@@ -19100,6 +19232,7 @@ part parent ".avr8x_tiny" # t402
         "ATtiny402-SSNR: SOIC8, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 284;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x27;
 
@@ -19152,6 +19285,7 @@ part parent ".avr8x_tiny" # t404
         "ATtiny404-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 285;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x26;
 
@@ -19206,6 +19340,7 @@ part parent ".avr8x_tiny" # t406
         "ATtiny406-SNR: SOIC20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 286;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x25;
 
@@ -19258,6 +19393,7 @@ part parent ".avr8x_tiny" # t804
         "ATtiny804-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 295;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 31;
     signature              = 0x1e 0x93 0x25;
 
@@ -19303,6 +19439,7 @@ part parent ".avr8x_tiny" # t806
         "ATtiny806-SNR: SOIC300-20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 296;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 31;
     signature              = 0x1e 0x93 0x24;
 
@@ -19345,6 +19482,7 @@ part parent ".avr8x_tiny" # t807
         "ATtiny807-MRF: VQFN24, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 297;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 31;
     signature              = 0x1e 0x93 0x23;
 
@@ -19386,6 +19524,7 @@ part parent ".avr8x_tiny" # t1604
         "ATtiny1604-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 304;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x25;
 
@@ -19431,6 +19570,7 @@ part parent ".avr8x_tiny" # t1606
         "ATtiny1606-SNR: SOIC300-20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 305;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x24;
 
@@ -19473,6 +19613,7 @@ part parent ".avr8x_tiny" # t1607
         "ATtiny1607-MRF: VQFN24, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 306;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x23;
 
@@ -19514,6 +19655,7 @@ part parent ".avr8x_tiny" # t212
         "ATtiny212-SSNR: SOIC8, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 282;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x91 0x21;
 
@@ -19566,6 +19708,7 @@ part parent ".avr8x_tiny" # t214
         "ATtiny214-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 283;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x91 0x20;
 
@@ -19618,6 +19761,7 @@ part parent ".avr8x_tiny" # t412
         "ATtiny412-SSNR: SOIC8, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 287;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x23;
 
@@ -19670,6 +19814,7 @@ part parent ".avr8x_tiny" # t414
         "ATtiny414-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 288;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x22;
 
@@ -19724,6 +19869,7 @@ part parent ".avr8x_tiny" # t416
         "ATtiny416-SNR: SOIC20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 289;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x21;
 
@@ -19797,6 +19943,7 @@ part parent ".avr8x_tiny" # t417
         "ATtiny417-MNR: QFN24,  Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 291;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x92 0x20;
 
@@ -19868,6 +20015,7 @@ part parent ".avr8x_tiny" # t814
         "ATtiny814-SSNRES: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 298;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x93 0x22;
 
@@ -19943,6 +20091,7 @@ part parent ".avr8x_tiny" # t816
         "ATtiny816-SNR:   SOIC20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 299;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x93 0x21;
 
@@ -20016,6 +20165,7 @@ part parent ".avr8x_tiny" # t817
         "ATtiny817-MNRES: VQFN24, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 300;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 26;
     signature              = 0x1e 0x93 0x20;
 
@@ -20087,6 +20237,7 @@ part parent ".avr8x_tiny" # t1614
         "ATtiny1614-SSNR: SOIC14, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 307;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x22;
 
@@ -20159,6 +20310,7 @@ part parent ".avr8x_tiny" # t1616
         "ATtiny1616-SNR: SOIC20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 308;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x21;
 
@@ -20231,6 +20383,7 @@ part parent ".avr8x_tiny" # t1617
         "ATtiny1617-MNR: QFN24,  Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 309;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x20;
 
@@ -20301,6 +20454,7 @@ part parent ".avr8x_tiny" # t3216
         "ATtiny3216-SNR: SOIC20, Fmax=20 MHz, T=[-40 C, 105 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 314;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x95 0x21;
 
@@ -20414,6 +20568,8 @@ part parent ".avr8x_tiny" # t424
         "ATtiny424-XU:         TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny424-XUR:        TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 292;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x92 0x2c;
 
@@ -20468,6 +20624,8 @@ part parent ".avr8x_tiny" # t426
         "ATtiny426-XU:        SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny426-XUR:       SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 293;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x92 0x2b;
 
@@ -20513,6 +20671,8 @@ part parent ".avr8x_tiny" # t427
         "ATtiny427-MUR:  VQFN24, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny427-VFQN: QFP24,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 294;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x92 0x2a;
 
@@ -20562,6 +20722,8 @@ part parent ".avr8x_tiny" # t824
         "ATtiny824-XU:         TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny824-XUR:        TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 301;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x93 0x29;
 
@@ -20616,6 +20778,8 @@ part parent ".avr8x_tiny" # t826
         "ATtiny826-XU:        SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny826-XUR:       SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 302;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x93 0x28;
 
@@ -20661,6 +20825,8 @@ part parent ".avr8x_tiny" # t827
         "ATtiny827-MUR:  VQFN24, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny827-VQFN: QFP24,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 303;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 30;
     signature              = 0x1e 0x93 0x27;
 
@@ -20710,6 +20876,8 @@ part parent ".avr8x_tiny" # t1624
         "ATtiny1624-XU:         TSSOP14, Fmax=20 MHz, T=[-40 C,   N/A], Vcc=[1.8 V, 5.5 V]",
         "ATtiny1624-XUR:        TSSOP14, Fmax=20 MHz, T=[-40 C,   N/A], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 310;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x94 0x2a;
 
@@ -20764,6 +20932,8 @@ part parent ".avr8x_tiny" # t1626
         "ATtiny1626-XU:        SSOP20, Fmax=20 MHz, T=[-40 C,   N/A], Vcc=[1.8 V, 5.5 V]",
         "ATtiny1626-XUR:       SSOP20, Fmax=20 MHz, T=[-40 C,   N/A], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 311;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x94 0x29;
 
@@ -20809,6 +20979,8 @@ part parent ".avr8x_tiny" # t1627
         "ATtiny1627-MUR:  VQFN24, Fmax=20 MHz, T=[-40 C,   N/A], Vcc=[1.8 V, 5.5 V]",
         "ATtiny1627-VQFN: QFP24,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 312;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x94 0x28;
 
@@ -20858,6 +21030,8 @@ part parent ".avr8x_tiny" # t3224
         "ATtiny3224-XU:         TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny3224-XUR:        TSSOP14, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 316;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x95 0x28;
 
@@ -20912,6 +21086,8 @@ part parent ".avr8x_tiny" # t3226
         "ATtiny3226-XU:        SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny3226-XUR:       SSOP20, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 317;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x95 0x27;
 
@@ -20957,6 +21133,8 @@ part parent ".avr8x_tiny" # t3227
         "ATtiny3227-MUR:  VQFN24, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "ATtiny3227-VQFN: QFP24,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 318;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 30;
     signature              = 0x1e 0x95 0x26;
 
@@ -21010,6 +21188,7 @@ part parent ".avr8x_mega" # m808
         "ATmega808-XUR: SSOP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 319;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 36;
     signature              = 0x1e 0x93 0x26;
 
@@ -21060,6 +21239,7 @@ part parent ".avr8x_mega" # m809
         "ATmega809-MUR: VQFN48, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 320;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3small;
     n_interrupts           = 40;
     signature              = 0x1e 0x93 0x2a;
 
@@ -21114,6 +21294,7 @@ part parent ".avr8x_mega" # m1608
         "ATmega1608-XUR: SSOP28, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 321;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x94 0x27;
 
@@ -21164,6 +21345,7 @@ part parent ".avr8x_mega" # m1609
         "ATmega1609-MUR: VQFN48, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 322;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 40;
     signature              = 0x1e 0x94 0x26;
 
@@ -21218,6 +21400,7 @@ part parent ".avr8x_mega" # m3208
         "ATmega3208-XUR: SSOP28, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 323;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x95 0x30;
 
@@ -21269,6 +21452,7 @@ part parent ".avr8x_mega" # m3209
         "ATmega3209-MUR: VQFN48, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 324;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 40;
     signature              = 0x1e 0x95 0x31;
 
@@ -21324,6 +21508,7 @@ part parent ".avr8x_mega" # m4808
         "ATmega4808-XUR: SSOP28, Fmax=N/A,    T=[N/A,     N/A], Vcc=[N/A,     N/A]";
     mcuid                  = 325;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x96 0x50;
 
@@ -21376,6 +21561,7 @@ part parent ".avr8x_mega" # m4809
         "ATmega4809-PF:  PDIP40, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 326;
     archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 40;
     signature              = 0x1e 0x96 0x51;
 
@@ -21659,6 +21845,8 @@ part parent ".avr-da-db" # 32da28
         "AVR32DA28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 338;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 41;
     signature              = 0x1e 0x95 0x34;
 
@@ -21709,6 +21897,8 @@ part parent ".avr-da-db" # 32da32
         "AVR32DA32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 342;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 44;
     signature              = 0x1e 0x95 0x33;
 
@@ -21759,6 +21949,8 @@ part parent ".avr-da-db" # 32da48
         "AVR32DA48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 346;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 61;
     signature              = 0x1e 0x95 0x32;
 
@@ -21811,6 +22003,8 @@ part parent ".avr-da-db" # 64da28
         "AVR64DA28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 351;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 41;
     signature              = 0x1e 0x96 0x15;
 
@@ -21861,6 +22055,8 @@ part parent ".avr-da-db" # 64da32
         "AVR64DA32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 355;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 44;
     signature              = 0x1e 0x96 0x14;
 
@@ -21911,6 +22107,8 @@ part parent ".avr-da-db" # 64da48
         "AVR64DA48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 359;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 58;
     signature              = 0x1e 0x96 0x13;
 
@@ -21961,6 +22159,8 @@ part parent ".avr-da-db" # 64da64
         "AVR64DA64T-I/PT:     TQFP64, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 362;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 64;
     signature              = 0x1e 0x96 0x12;
 
@@ -22013,6 +22213,8 @@ part parent ".avr-da-db" # 128da28
         "AVR128DA28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 364;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 41;
     signature              = 0x1e 0x97 0x0a;
 
@@ -22063,6 +22265,8 @@ part parent ".avr-da-db" # 128da32
         "AVR128DA32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 366;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 44;
     signature              = 0x1e 0x97 0x09;
 
@@ -22113,6 +22317,8 @@ part parent ".avr-da-db" # 128da48
         "AVR128DA48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 368;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 58;
     signature              = 0x1e 0x97 0x08;
 
@@ -22163,6 +22369,8 @@ part parent ".avr-da-db" # 128da64
         "AVR128DA64T-I/PT:     TQFP64, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     family_id              = "    AVR";
     mcuid                  = 370;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 64;
     signature              = 0x1e 0x97 0x07;
 
@@ -22489,6 +22697,8 @@ part parent ".avr-da-db" # 32db28
         "AVR32DB28T-I/SO:           SOIC28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DB28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 339;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 42;
     signature              = 0x1e 0x95 0x37;
 
@@ -22533,6 +22743,8 @@ part parent ".avr-da-db" # 32db32
         "AVR32DB32T-I/PT:     TQFP32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DB32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 343;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 44;
     signature              = 0x1e 0x95 0x36;
 
@@ -22577,6 +22789,8 @@ part parent ".avr-da-db" # 32db48
         "AVR32DB48T-I/6LX:    VQFN48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DB48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 347;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 61;
     signature              = 0x1e 0x95 0x35;
 
@@ -22623,6 +22837,8 @@ part parent ".avr-da-db" # 64db28
         "AVR64DB28T-I/SO:           SOIC28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DB28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 352;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 42;
     signature              = 0x1e 0x96 0x19;
 
@@ -22667,6 +22883,8 @@ part parent ".avr-da-db" # 64db32
         "AVR64DB32T-I/PT:     TQFP32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DB32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 356;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 44;
     signature              = 0x1e 0x96 0x18;
 
@@ -22711,6 +22929,8 @@ part parent ".avr-da-db" # 64db48
         "AVR64DB48T-I/6LX:    VQFN48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DB48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 360;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 61;
     signature              = 0x1e 0x96 0x17;
 
@@ -22755,6 +22975,8 @@ part parent ".avr-da-db" # 64db64
         "AVR64DB64T-I/MR:     QFN64,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DB64T-I/PT:     TQFP64, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 363;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 65;
     signature              = 0x1e 0x96 0x16;
 
@@ -22801,6 +23023,8 @@ part parent ".avr-da-db" # 128db28
         "AVR128DB28T-I/SO:           SOIC28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR128DB28T-I/SS:           SSOP28,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 365;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 42;
     signature              = 0x1e 0x97 0x0e;
 
@@ -22845,6 +23069,8 @@ part parent ".avr-da-db" # 128db32
         "AVR128DB32T-I/PT:     TQFP32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR128DB32T-I/RXB:    VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 367;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 44;
     signature              = 0x1e 0x97 0x0d;
 
@@ -22889,6 +23115,8 @@ part parent ".avr-da-db" # 128db48
         "AVR128DB48T-I/6LX:    VQFN48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR128DB48T-I/PT:     TQFP48, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 369;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 61;
     signature              = 0x1e 0x97 0x0c;
 
@@ -22933,6 +23161,8 @@ part parent ".avr-da-db" # 128db64
         "AVR128DB64T-I/MR:     QFN64,  Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR128DB64T-I/PT:     TQFP64, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 371;
+    archnum                = 104;
+    instruction_set        = ISA_avrxmega4;
     n_interrupts           = 65;
     signature              = 0x1e 0x97 0x0b;
 
@@ -23145,6 +23375,8 @@ part parent ".avr-dd-du" # 16dd14
         "AVR16DD14-I/SL: SOIC14, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR16DD14-SOIC: DIP14,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 329;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x94 0x34;
 
@@ -23174,6 +23406,8 @@ part parent ".avr-dd-du" # 16dd20
         "AVR16DD20-SOIC:  DIP20,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR16DD20-VQFN:  QFP20,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 330;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x94 0x33;
 
@@ -23205,6 +23439,8 @@ part parent ".avr-dd-du" # 16dd28
         "AVR16DD28-SPDIP/SSOP/SOIC: DIP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR16DD28-VQFN:            QFP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 331;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x94 0x32;
 
@@ -23233,6 +23469,8 @@ part parent ".avr-dd-du" # 16dd32
         "AVR16DD32-I/RXB:     VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR16DD32-VQFN/TQFP: QFP32,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 333;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x94 0x31;
 
@@ -23260,6 +23498,8 @@ part parent ".avr-dd-du" # 32dd14
         "AVR32DD14-I/SL: SOIC14, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DD14-SOIC: DIP14,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 336;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x95 0x3b;
 
@@ -23289,6 +23529,8 @@ part parent ".avr-dd-du" # 32dd20
         "AVR32DD20-SOIC:  DIP20,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DD20-VQFN:  QFP20,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 337;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x95 0x3a;
 
@@ -23320,6 +23562,8 @@ part parent ".avr-dd-du" # 32dd28
         "AVR32DD28-SPDIP/SSOP/SOIC: DIP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DD28-VQFN:            QFP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 340;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x95 0x39;
 
@@ -23348,6 +23592,8 @@ part parent ".avr-dd-du" # 32dd32
         "AVR32DD32-I/RXB:     VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32DD32-VQFN/TQFP: QFP32,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 344;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 36;
     signature              = 0x1e 0x95 0x38;
 
@@ -23375,6 +23621,8 @@ part parent ".avr-dd-du" # 64dd14
         "AVR64DD14-I/SL: SOIC14, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DD14-SOIC: DIP14,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 349;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 36;
     signature              = 0x1e 0x96 0x1d;
 
@@ -23402,6 +23650,8 @@ part parent ".avr-dd-du" # 64dd20
         "AVR64DD20-I/SO: SOIC20, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DD20-SOIC: DIP20,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 350;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 36;
     signature              = 0x1e 0x96 0x1c;
 
@@ -23433,6 +23683,8 @@ part parent ".avr-dd-du" # 64dd28
         "AVR64DD28-SPDIP/SSOP/SOIC: DIP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DD28-VQFN:            QFP28,   Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 353;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 36;
     signature              = 0x1e 0x96 0x1b;
 
@@ -23461,6 +23713,8 @@ part parent ".avr-dd-du" # 64dd32
         "AVR64DD32-I/RXB:     VQFN32, Fmax=24 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DD32-VQFN/TQFP: QFP32,  Fmax=32 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 357;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 36;
     signature              = 0x1e 0x96 0x1a;
 
@@ -23488,6 +23742,8 @@ part parent ".avr-dd-du" # 64du28
         "AVR64DU28-SSOP/SPDIP: DIP28, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64DU28-VQFN:       QFP28, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 384;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 34;
     signature              = 0x1e 0x96 0x22;
 
@@ -23576,6 +23832,8 @@ part parent "64du28" # 16du14
     variants               =
         "AVR16DU14-SOIC: DIP14, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 386;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     signature              = 0x1e 0x94 0x3b;
 
     memory "flash"
@@ -23639,6 +23897,8 @@ part parent "64du28" # 32du14
     variants               =
         "AVR32DU14-SOIC: DIP14, Fmax=32 MHz, T=[-40 C, 85 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 390;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     signature              = 0x1e 0x95 0x4f;
 
     memory "flash"
@@ -23869,6 +24129,7 @@ part parent ".avr-ex" # 8ea28
     desc                   = "AVR8EA28";
     id                     = "8ea28";
     mcuid                  = 327;
+    instruction_set        = ISA_avrxmega3small;
     signature              = 0x1e 0x93 0x2c;
 
     memory "eeprom"
@@ -23925,6 +24186,7 @@ part parent ".avr-ex" # 8ea32
     desc                   = "AVR8EA32";
     id                     = "8ea32";
     mcuid                  = 328;
+    instruction_set        = ISA_avrxmega3small;
     signature              = 0x1e 0x93 0x2b;
 
     memory "eeprom"
@@ -23984,6 +24246,8 @@ part parent ".avr-ex" # 16ea28
         "AVR16EA28-SSOP/SPDIP: DIP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR16EA28-VQFN:       QFP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 332;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 43;
     signature              = 0x1e 0x94 0x37;
 
@@ -24021,6 +24285,8 @@ part parent ".avr-ex" # 16ea32
     variants               =
         "AVR16EA32-VQFN/TQFP: QFP32, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 334;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 43;
     signature              = 0x1e 0x94 0x36;
 
@@ -24058,6 +24324,8 @@ part parent ".avr-ex" # 16ea48
     variants               =
         "AVR16EA48-VQFN/TQFP: QFP48, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 335;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 45;
     signature              = 0x1e 0x94 0x35;
 
@@ -24096,6 +24364,8 @@ part parent ".avr-ex" # 32ea28
         "AVR32EA28-SSOP/SPDIP: DIP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32EA28-VQFN:       QFP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 341;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 43;
     signature              = 0x1e 0x95 0x3e;
 
@@ -24133,6 +24403,8 @@ part parent ".avr-ex" # 32ea32
     variants               =
         "AVR32EA32-VQFN/TQFP: QFP32, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 345;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 43;
     signature              = 0x1e 0x95 0x3d;
 
@@ -24170,6 +24442,8 @@ part parent ".avr-ex" # 32ea48
     variants               =
         "AVR32EA48-VQFN/TQFP: QFP48, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 348;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 45;
     signature              = 0x1e 0x95 0x3c;
 
@@ -24210,6 +24484,8 @@ part parent ".avr-ex" # 64ea28
         "AVR64EA28-SSOP/SPDIP: DIP28,   Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64EA28-VQFN:       QFP28,   Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 354;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 43;
     signature              = 0x1e 0x96 0x20;
 
@@ -24249,6 +24525,8 @@ part parent ".avr-ex" # 64ea32
         "AVR64EA32-I/RXB:     VQFN32, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64EA32-VQFN/TQFP: QFP32,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 358;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 43;
     signature              = 0x1e 0x96 0x1f;
 
@@ -24288,6 +24566,8 @@ part parent ".avr-ex" # 64ea48
         "AVR64EA48-I/PT:      TQFP48, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.8 V, 5.5 V]",
         "AVR64EA48-VQFN/TQFP: QFP48,  Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 361;
+    archnum                = 102;
+    instruction_set        = ISA_avrxmega2;
     n_interrupts           = 45;
     signature              = 0x1e 0x96 0x1e;
 
@@ -24325,6 +24605,8 @@ part parent ".avr-ex" # 16eb14
     variants               =
         "AVR16EB14-SOIC/TSSOP: DIP14, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 380;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 31;
     signature              = 0x1e 0x94 0x49;
 
@@ -24770,6 +25052,8 @@ part parent ".avr-lx" # 16la14
         "AVR16LA14T-I/SL:      SOIC,  Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.62 V, 5.5 V]",
         "AVR16LA14T-I/ST:      TSSOP, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.62 V, 5.5 V]";
     mcuid                  = 414;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     signature              = 0x1e 0x94 0x54;
 
     memory "flash"
@@ -24865,6 +25149,8 @@ part parent ".avr-lx" # 32la14
         "AVR32LA14T-I/SL:      SOIC,  Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.62 V, 5.5 V]",
         "AVR32LA14T-I/ST:      TSSOP, Fmax=20 MHz, T=[-40 C,  85 C], Vcc=[1.62 V, 5.5 V]";
     mcuid                  = 418;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     signature              = 0x1e 0x95 0x29;
 
     memory "flash"
@@ -25146,6 +25432,8 @@ part parent ".avr-sx" # 32sd20
     variants               =
         "AVR32SD20-SSOP: DIP20, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 402;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 50;
     signature              = 0x1e 0x95 0x54;
 ;
@@ -25161,6 +25449,8 @@ part parent ".avr-sx" # 32sd28
         "AVR32SD28-SSOP/SPDIP: DIP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]",
         "AVR32SD28-VQFN:       QFP28, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 403;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 54;
     signature              = 0x1e 0x95 0x53;
 ;
@@ -25175,6 +25465,8 @@ part parent ".avr-sx" # 32sd32
     variants               =
         "AVR32SD32-VQFN/TQFP: QFP32, Fmax=20 MHz, T=[-40 C, 125 C], Vcc=[1.8 V, 5.5 V]";
     mcuid                  = 404;
+    archnum                = 103;
+    instruction_set        = ISA_avrxmega3;
     n_interrupts           = 56;
     signature              = 0x1e 0x95 0x52;
 ;

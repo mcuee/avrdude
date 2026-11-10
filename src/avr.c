@@ -458,7 +458,8 @@ int avr_read_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRMEM *mem, con
         nread++;
         report_progress(nread, npages, NULL);
       } else {
-        pmsg_debug("%s(): skipping page %u: no interesting data\n", __func__, pageaddr/mem->page_size);
+        pmsg_debug("%s(): skipping page %u in a hole or beyond input file\n",
+          __func__, pageaddr/mem->page_size);
       }
     }
     if(!failure) {
@@ -661,12 +662,15 @@ int avr_can_skip_write_byte(const PROGRAMMER *pgm, const AVRPART *p, const AVRME
   if(mem->paged || mem_is_io(mem) || (p->flags & AVRPART_IS_AT90S1200))
     return 0;
 
-  // Don't skip write when programming a bootloader
-  if(is_spm(pgm))
+  const PROGRAMMER *dry = locate_programmer(programmers, "dryrun");
+  int is_dryrun = str_eq(pgm->ptyp, "Dryrun") || (dry && pgm->initpgm == dry->initpgm);
+
+  // Don't skip write when programming a bootloader (unless dryboot)
+  if(is_spm(pgm) && !is_dryrun)
     return 0;
 
   // Unclear whether this optimisation would work for TPI parts
-  if(is_tpi(p))
+  if(is_tpi(p) && !is_dryrun)
     return 0;
 
   unsigned char is;
@@ -826,11 +830,15 @@ int avr_write_byte_default(const PROGRAMMER *pgm, const AVRPART *p, const AVRMEM
   }
 
   int bm = avr_mem_bitmask(p, mem, addr);
+  unsigned char rb[2] = { mem->readback[0], mem->readback[1] };
+
+  if(mem_is_eeprom(mem) && !rb[0] && !rb[1]) // Make default readback values 0xff for eeproms
+    rb[0] = rb[1] = 0xff;
   tries = 0;
   ready = 0;
   while(!ready) {
     if(!(mem_is_eeprom(mem) || mem_is_in_flash(mem)) || // Only poll for flash or eeprom
-      data == mem->readback[0] || data == mem->readback[1]) { // ... unless data is readback
+      data == rb[0] || data == rb[1]) { // ... unless data is readback
       /*
        * Use an extra long delay when we happen to be writing values used for
        * polled data read-back.  In this case, polling doesn't work, and we
@@ -1184,7 +1192,8 @@ int avr_write_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRMEM *m, int 
         nwritten++;
         report_progress(nwritten, npages, NULL);
       } else {
-        pmsg_debug("%s(): skipping page %u: no interesting data\n", __func__, pageaddr/cm->page_size);
+        pmsg_debug("%s(): skipping page %u in a hole or beyond input file\n",
+          __func__, pageaddr/cm->page_size);
       }
     }
 
@@ -1355,7 +1364,6 @@ int avr_verify(const PROGRAMMER *pgm, const AVRPART *p, const AVRPART *v, const 
 }
 
 int avr_verify_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRPART *v, const AVRMEM *a, int size) {
-  int i;
   unsigned char *buf1, *buf2;
   int vsize;
   AVRMEM *b;
@@ -1379,53 +1387,72 @@ int avr_verify_mem(const PROGRAMMER *pgm, const AVRPART *p, const AVRPART *v, co
     size = vsize;
   }
 
-  int verror = 0, vroerror = 0, maxerrs = verbose >= MSG_DEBUG? size + 1: 10;
+  int verror = 0, vroerror = 0, maxerrs = verbose >= MSG_DEBUG? size: verbose >= MSG_NOTICE? 10: 1;
   int ro = mem_is_readonly(a);  // Other memories can have known protected zones such as bootloaders
+  int biterrs = 0, bitsset = 0, partbyte = 0, partbytesdiffer = 0, stats[256] = { 0 };
+  unsigned int bdiff;
 
-  for(i = 0; i < size; i++) {
-    if((b->tags[i] & TAG_ALLOCATED) != 0 && buf1[i] != buf2[i]) {
+  for(int i = 0; i < size; i++) {
+    if(!(b->tags[i] & TAG_ALLOCATED))
+      continue;
+    stats[buf1[i]]++;           // Distribution of bytes read from the device
+
+    if(buf1[i] != buf2[i]) {
       uint8_t bitmask = is_isp(p)? get_fuse_bitmask(a): avr_mem_bitmask(p, a, i);
+      char where[64];
+      sprintf(where, "%cat addr 0x%04x", a->size > 1? ' ': 0, i);
 
       if(ro || (pgm->readonly && pgm->readonly(pgm, p, a, i))) {
-        if(quell_progress < 2) {
-          if(vroerror < 10) {
-            if(!(verror + vroerror))
-              pmsg_warning("%s verification mismatch%s\n", a->desc,
-                mem_is_in_flash(a)? " in r/o areas, expected for vectors and/or bootloader": "");
-            imsg_warning("  device 0x%02x != input 0x%02x at addr 0x%04x "
-              "(read only location: ignored)\n", buf1[i], buf2[i], i);
-          } else if(vroerror == 10)
-            imsg_warning("  suppressing further mismatches in read-only areas\n");
-        }
+        if(vroerror < 10)
+          imsg_info("  %s 0x%02x != input 0x%02x%s (read-only location: ignored)\n",
+            avr_mem_desc(p, a, 1), buf1[i], buf2[i], where);
+        else if(vroerror == 10)
+          imsg_info("  Showing no further mismatches in read-only areas\n");
         vroerror++;
-      } else if((buf1[i] & bitmask) != (buf2[i] & bitmask)) {
-        // Mismatch is not just in unused bits
-        if(verror < maxerrs) {
-          if(!(verror + vroerror))
-            pmsg_warning("%s verification mismatch\n", a->desc);
-          imsg_error("  device 0x%02x != input 0x%02x at addr 0x%04x (error)\n", buf1[i], buf2[i], i);
-        } else if(verror == maxerrs) {
-          imsg_warning("  suppressing further verification errors\n");
+      } else if((bdiff = (buf1[i] & bitmask) ^ (buf2[i] & bitmask))) {
+        // Mismatch is not just in unused bits, loop over bit positions that differ
+        for(unsigned int lbit; bdiff; bdiff ^= lbit) {
+           lbit = bdiff & (~bdiff + 1); // Lowest bit that differs (~x + 1 is -x without MSVC C4146)
+           biterrs++;             // Number of bit mismatches
+           bitsset += !!(lbit & buf1[i]); // The mismatched bit was set on device
         }
+        if(verror < maxerrs)
+          imsg_info("  %s 0x%02x != input 0x%02x%s (error)\n",
+            avr_mem_desc(p, a, 1), buf1[i], buf2[i], where);
+        else if(verror == maxerrs)
+          imsg_info("  Showing no further verification errors (increase verbosity for more)\n");
+        if(verror == 0)
+          partbyte = buf1[i];
+        else if(partbyte != buf1[i])
+          partbytesdiffer = 1;
+
         verror++;
-        if(verbose < MSG_NOTICE)
-          return -1;
       } else {
         // Mismatch is only in unused bits
         if((buf1[i] | bitmask) != 0xff) {
           // Programmer returned unused bits as 0, must be the part/programmer
           pmsg_debug("ignoring mismatch in unused bits of %s\n", a->desc);
-          imsg_debug("(device 0x%02x != input 0x%02x); to prevent this warning fix\n", buf1[i], buf2[i]);
+          imsg_debug("(%s 0x%02x != input 0x%02x); to prevent this warning fix\n",
+            avr_mem_desc(p, a, 0), buf1[i], buf2[i]);
           imsg_debug("the part or programmer definition in the config file\n");
         } else {
           // Programmer returned unused bits as 1, must be the user
           pmsg_debug("ignoring mismatch in unused bits of %s\n", a->desc);
-          imsg_debug("(device 0x%02x != input 0x%02x); to prevent this warning set\n", buf1[i], buf2[i]);
+          imsg_debug("(%s 0x%02x != input 0x%02x); to prevent this warning set\n",
+            avr_mem_desc(p, a, 0), buf1[i], buf2[i]);
           imsg_debug("unused bits to 1 when writing (double check with datasheet)\n");
         }
       }
     }
   }
+  if(verror)
+    imsg_info("  %d byte%s do%s not match caused by %d bit error%s (%d set and %d cleared on device)\n",
+      verror, str_plural(verror), verror > 1? "": "es", biterrs, str_plural(biterrs), bitsset, biterrs-bitsset);
+  if(verror && bitsset == 0 && mem_is_in_flash(a))
+    imsg_info("  Maybe flash was not erased beforehand or flash programming sections overlap?\n");
+  if(verror > 10 && !partbytesdiffer  && mem_is_in_flash(a))
+    imsg_info("  Maybe lock bits protect %s (read %d times the byte 0x%02x)?\n",
+      avr_mem_desc(p, a, 0), stats[partbyte & 0xff], partbyte);
 
   return verror? -1: size;
 }
@@ -1493,7 +1520,7 @@ char *avr_cc_buffer(size_t n) {
   size_t avail = sizeof cx->avr_space - AVR_SAFETY_MARGIN;
 
   if(!is_memset(cx->avr_space + avail, 0, AVR_SAFETY_MARGIN)) {
-    pmsg_warning("avr_cc_buffer(n) overran; n chosen too small in previous calls? Change and recompile\n");
+    pmsg_warning("buffer overrun; n chosen too small in previous calls?\n");
     memset(cx->avr_space + avail, 0, AVR_SAFETY_MARGIN);
   }
 
@@ -1689,7 +1716,11 @@ static int mem_group(AVRMEM *mem) {
     mem_is_in_flash(mem)? 1:
     mem_is_in_fuses(mem)? 2:
     mem_is_lock(mem)? 3:
-    mem_is_in_sigrow(mem)? 4: mem_is_user_type(mem)? 5: mem_is_io(mem)? 6: mem_is_sram(mem)? 7: mem_is_sib(mem)? 8: 9;
+    mem_is_in_sigrow(mem)? 4:
+    mem_is_user_type(mem)? 5:
+    mem_is_io(mem)? 6:
+    mem_is_sram(mem)? 7:
+    mem_is_sib(mem)? 8: 9;
 }
 
 // Return sort order of memories
@@ -1856,13 +1887,17 @@ void report_progress(int completed, int total, const char *hdr) {
   }
 }
 
-// Output comms buffer
+// Output comms buffer like memory dump
 void trace_buffer(const char *funstr, const unsigned char *buf, size_t buflen) {
-  pmsg_trace("%s: ", funstr);
-  while(buflen--) {
-    unsigned char c = *buf++;
+  if(verblevel >= MSG_TRACE) {
+    char out[72];
 
-    msg_trace("%c [%02x]%s", isascii(c) && isprint(c)? c: '.', c, buflen? " ": "");
+    while(buflen) {
+      size_t len = minm(buflen, 16);
+      str_hexdump16(out, buf, len);
+      pmsg_trace("%s: %s\n", funstr, out);
+      buf += len;
+      buflen -= len;
+    }
   }
-  msg_trace("\n");
 }

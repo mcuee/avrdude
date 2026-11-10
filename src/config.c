@@ -60,6 +60,7 @@ char *cfg_infile;
 
 extern char *yytext;
 
+#define pgm_comp_name_desc(n, x, type)  { n, COMP_PROGRAMMER, offsetof(PROGRAMMER, x), sizeof(((PROGRAMMER *) NULL)->x), type }
 #define pgm_comp_desc(x, type)  { #x, COMP_PROGRAMMER, offsetof(PROGRAMMER, x), sizeof(((PROGRAMMER *) NULL)->x), type }
 #define part_comp_desc(x, type) { #x, COMP_AVRPART, offsetof(AVRPART, x), sizeof(((AVRPART *) NULL)->x), type }
 #define mem_comp_desc(x, type)  { #x, COMP_AVRMEM, offsetof(AVRMEM, x), sizeof(((AVRMEM *) NULL)->x), type }
@@ -71,6 +72,7 @@ Component avr_comp[] = {
   pgm_comp_desc(prog_modes, COMP_INT),
   pgm_comp_desc(is_serialadapter, COMP_INT),
   pgm_comp_desc(extra_features, COMP_INT),
+  pgm_comp_name_desc("port", default_port, COMP_STRING),
   pgm_comp_desc(baudrate, COMP_INT),
   pgm_comp_desc(usbvid, COMP_INT),
   pgm_comp_desc(usbdev, COMP_STRING),
@@ -84,6 +86,7 @@ Component avr_comp[] = {
   part_comp_desc(prog_modes, COMP_INT),
   part_comp_desc(mcuid, COMP_INT),
   part_comp_desc(archnum, COMP_INT),
+  part_comp_desc(instruction_set, COMP_INT),
   part_comp_desc(n_interrupts, COMP_INT),
   part_comp_desc(n_page_erase, COMP_INT),
   part_comp_desc(n_boot_sections, COMP_INT),
@@ -349,6 +352,44 @@ TOKEN *new_constant(const char *con) {
     str_eq(con, "HAS_FOSC_ADJ")? HAS_FOSC_ADJ:
     str_eq(con, "HAS_VAREF_ADJ")? HAS_VAREF_ADJ:
     str_eq(con, "HAS_BITCLOCK_ADJ")? HAS_BITCLOCK_ADJ:
+    str_eq(con, "OP_All")? OP_All:
+    str_eq(con, "ISA_avrxmega7")? ISA_avrxmega7:
+    str_eq(con, "ISA_avrxmega6")? ISA_avrxmega6:
+    str_eq(con, "ISA_avrxmega5")? ISA_avrxmega5:
+    str_eq(con, "ISA_avrxmega4")? ISA_avrxmega4:
+    str_eq(con, "ISA_avrxmega3")? ISA_avrxmega3:
+    str_eq(con, "ISA_avrxmega3small")? ISA_avrxmega3small:
+    str_eq(con, "ISA_avrxmega2")? ISA_avrxmega2:
+    str_eq(con, "ISA_avr6")? ISA_avr6:
+    str_eq(con, "ISA_avr51")? ISA_avr51:
+    str_eq(con, "ISA_avr5")? ISA_avr5:
+    str_eq(con, "ISA_avr4")? ISA_avr4:
+    str_eq(con, "ISA_avr35")? ISA_avr35:
+    str_eq(con, "ISA_avr31")? ISA_avr31:
+    str_eq(con, "ISA_avr3")? ISA_avr3:
+    str_eq(con, "ISA_avr25")? ISA_avr25:
+    str_eq(con, "ISA_avr2")? ISA_avr2:
+    str_eq(con, "ISA_avrtiny")? ISA_avrtiny:
+    str_eq(con, "ISA_avr1")? ISA_avr1:
+    str_eq(con, "OP_AVRrc")? OP_AVRrc:
+    str_eq(con, "OP_AVR1")? OP_AVR1:
+    str_eq(con, "OP_LPM")? OP_LPM:
+    str_eq(con, "OP_AVR2")? OP_AVR2:
+    str_eq(con, "OP_AVR2e")? OP_AVR2e:
+    str_eq(con, "OP_MOVW_SPM")? OP_MOVW_SPM:
+    str_eq(con, "OP_LPMx")? OP_LPMx:
+    str_eq(con, "OP_JMP_CALL")? OP_JMP_CALL:
+    str_eq(con, "OP_MUL")? OP_MUL:
+    str_eq(con, "OP_ELPM")? OP_ELPM:
+    str_eq(con, "OP_ELPMx")? OP_ELPMx:
+    str_eq(con, "OP_EIJMP_EICALL")? OP_EIJMP_EICALL:
+    str_eq(con, "OP_DES")? OP_DES:
+    str_eq(con, "OP_RMW")? OP_RMW:
+    str_eq(con, "OP_SPMx")? OP_SPMx:
+    str_eq(con, "OP_Undocumented")? OP_Undocumented:
+    str_eq(con, "REG_RAMPDXY")? REG_RAMPDXY:
+    str_eq(con, "REG_RAMPZ")? REG_RAMPZ:
+    str_eq(con, "MEM_LINEAR64")? MEM_LINEAR64:
     str_eq(con, "pseudo")? 2:
     str_eq(con, "yes") || str_eq(con, "true")? 1: str_eq(con, "no") || str_eq(con, "false")? 0: (assigned = 0);
 
@@ -422,15 +463,8 @@ extern int yylex_destroy(void);
 #endif
 
 int read_config(const char *file) {
-  FILE *f;
-  int r;
-
-  if(!(cfg_infile = realpath(file, NULL))) {
-    pmsg_ext_error("cannot determine realpath() of config file %s: %s\n", file, strerror(errno));
-    return -1;
-  }
-
-  f = fopen(cfg_infile, "r");
+  cfg_infile = mmt_strdup(file);
+  FILE *f = fopen(cfg_infile, "r");
   if(f == NULL) {
     pmsg_ext_error("cannot open config file %s: %s\n", cfg_infile, strerror(errno));
     mmt_free(cfg_infile);
@@ -441,21 +475,18 @@ int read_config(const char *file) {
   cfg_lineno = 1;
   yyin = f;
 
-  r = yyparse();
+  int rc = yyparse();
 
 #ifdef HAVE_YYLEX_DESTROY
   // Reset lexer and free any allocated memory
   yylex_destroy();
 #endif
 
+  mmt_free(cfg_infile);
+  cfg_infile = NULL;
   fclose(f);
 
-  if(cfg_infile) {
-    mmt_free(cfg_infile);
-    cfg_infile = NULL;
-  }
-
-  return r;
+  return rc;
 }
 
 // Adapted version of a neat empirical hash function from comp.lang.c by Daniel Bernstein
@@ -502,6 +533,31 @@ COMMENT *locate_comment(const LISTID comments, const char *where, int rhs) {
     }
 
   return NULL;
+}
+
+// Modify part/programmer comments pointed to by commentsp using comments mods, and free mods if needed
+void modify_comments(LISTID *commentsp, LISTID mods) {
+  if(!*commentsp) {
+    *commentsp = mods;
+  } else if(mods) {
+    for(LNODEID ln = lfirst(mods); ln; ln = lnext(ln)) {
+      COMMENT *cpm = ldata(ln);
+      if(cpm) {
+        COMMENT *cpc = locate_comment(*commentsp, cpm->kw, cpm->rhs);
+        if(!cpc) {
+          ladd(*commentsp, cpm);
+        } else if(!str_eq(cpm->kw, "*") || !cpc->comms) { // Overwrite existing comment strings
+          if(cpc->comms)
+            ldestroy_cb(cpc->comms, mmt_f_free);
+          cpc->comms = cpm->comms;
+        } else if(cpm->comms) {    // Add comment-strings to existing list
+          for(LNODEID ls = lfirst(cpm->comms); ls; ls = lnext(ls))
+            ladd(cpc->comms, (char *) ldata(ls));
+        }
+      }
+    }
+    ldestroy(mods);
+  }
 }
 
 static void addcomment(int rhs) {
@@ -1101,7 +1157,7 @@ void cfg_update_mcuid(AVRPART *part) {
       if(flash) {
         size_t l1 = strlen(part->desc), l2 = strlen(uP_table[i].name);
 
-        if(strncasecmp(part->desc, uP_table[i].name, l1 < l2? l1: l2) ||
+        if(strncasecmp(part->desc, uP_table[i].name, minm(l1, l2)) ||
           flash->size != uP_table[i].flashsize ||
           flash->page_size != uP_table[i].pagesize || part->n_interrupts != (int8_t) uP_table[i].ninterrupts)
           yywarning("mcuid %d is reserved for %s, use a free number >= %d",

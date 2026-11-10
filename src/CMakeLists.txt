@@ -199,8 +199,10 @@ set(SOURCES
     disasm.c
     dfu.c
     dfu.h
+    dryautogen.c
     dryrun.c
     dryrun.h
+    dryrun_part.c
     dryrun_private.h
     fileio.c
     flip1.c
@@ -308,6 +310,8 @@ set(SOURCES
     usbtiny.h
     usbtiny.c
     update.c
+    whereami.c
+    whereami.h
     wiring.h
     wiring.c
     xbee.h
@@ -324,8 +328,8 @@ add_library(libavrdude
 set_target_properties(libavrdude PROPERTIES
     PREFIX ""
     PUBLIC_HEADER "libavrdude.h;libavrdude-avrintel.h"
-    VERSION 5.0.0
-    SOVERSION 5
+    VERSION 6.0.0
+    SOVERSION 6
     )
 
 target_include_directories(libavrdude
@@ -359,8 +363,6 @@ add_executable(avrdude
     developer_opts.c
     developer_opts.h
     developer_opts_private.h
-    whereami.c
-    whereami.h
     ${CMAKE_CURRENT_BINARY_DIR}/ac_cfg.h
     ${EXTRA_WINDOWS_RESOURCES}
     )

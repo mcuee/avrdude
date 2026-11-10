@@ -151,6 +151,71 @@ static char *extra_features_str(int m) {
   return mode + (mode[1] == 0? 0: 4);
 }
 
+static char *instruction_set_str(int m) {
+   static struct isas {
+    const char *name;
+    int isa;
+  } patterns[] = {
+    {"OP_All", OP_All},
+    {"ISA_avrxmega7", ISA_avrxmega7},
+    {"ISA_avrxmega6", ISA_avrxmega6},
+    {"ISA_avrxmega5", ISA_avrxmega5},
+    {"ISA_avrxmega4", ISA_avrxmega4},
+    {"ISA_avrxmega3", ISA_avrxmega3},
+    {"ISA_avrxmega3small", ISA_avrxmega3small},
+    {"ISA_avrxmega2", ISA_avrxmega2},
+    {"ISA_avr6", ISA_avr6},
+    {"ISA_avr51", ISA_avr51},
+    {"ISA_avr5", ISA_avr5},
+    {"ISA_avr4", ISA_avr4},
+    {"ISA_avr35", ISA_avr35},
+    {"ISA_avr31", ISA_avr31},
+    {"ISA_avr3", ISA_avr3},
+    {"ISA_avr25", ISA_avr25},
+    {"ISA_avr2", ISA_avr2},
+    {"ISA_avrtiny", ISA_avrtiny},
+    {"ISA_avr1", ISA_avr1},
+    {"OP_AVRrc", OP_AVRrc},
+    {"OP_AVR1", OP_AVR1},
+    {"OP_LPM", OP_LPM},
+    {"OP_AVR2", OP_AVR2},
+    {"OP_AVR2e", OP_AVR2e},
+    {"OP_MOVW_SPM", OP_MOVW_SPM},
+    {"OP_LPMx", OP_LPMx},
+    {"OP_JMP_CALL", OP_JMP_CALL},
+    {"OP_MUL", OP_MUL},
+    {"OP_ELPM", OP_ELPM},
+    {"OP_ELPMx", OP_ELPMx},
+    {"OP_EIJMP_EICALL", OP_EIJMP_EICALL},
+    {"OP_DES", OP_DES},
+    {"OP_RMW", OP_RMW},
+    {"OP_SPMx", OP_SPMx},
+    {"OP_Undocumented", OP_Undocumented},
+    {"REG_RAMPDXY", REG_RAMPDXY},
+    {"REG_RAMPZ", REG_RAMPZ},
+    {"MEM_LINEAR64", MEM_LINEAR64},
+  };
+  static char ret[1024];
+
+  if(m < 0) {
+    strcpy(ret, "-1");
+    return ret;
+  }
+
+  strcpy(ret, "0");
+  for(size_t i = 0; i < sizeof patterns/sizeof *patterns && m; i++) {
+    if((m & patterns[i].isa) == patterns[i].isa) {
+      m &= ~patterns[i].isa;
+      strcat(ret, " | ");
+      strcat(ret, patterns[i].name);
+    }
+  }
+  if(m)
+    sprintf(ret + strlen(ret), " | 0x%05x", m);
+
+  return ret + (ret[1] == 0? 0: 4);
+}
+
 // Check whether address bits are where they should be in ISP commands
 static void checkaddr(int memsize, int pagesize, int opnum, const OPCODE *op, const AVRPART *p, const AVRMEM *m) {
   int i, lo, hi;
@@ -594,6 +659,7 @@ static void dev_part_strct(const AVRPART *p, bool tsv, const AVRPART *base, bool
     _if_partout(intcmp, "%d", mcuid);
   }
   _if_partout(intcmp, "%d", archnum);
+  _if_partout_str(intcmp, mmt_strdup(instruction_set_str(p->instruction_set)), instruction_set);
   _if_partout(intcmp, "%d", n_interrupts);
   _if_partout(intcmp, "%d", n_page_erase);
   _if_partout(intcmp, "%d", n_boot_sections);
@@ -901,9 +967,9 @@ static const Avrintel *silent_locate_uP(const AVRPART *p) {
   return idx < 0? NULL: uP_table + idx;
 }
 
-// -p <wildcard>/[dsASRvcreow*tiBCUPTIJWHQ]
+// -p <wildcard>/[dsASRvcreow*tiBCUPTIJWHQM]
 void dev_output_part_defs(char *partdesc) {
-  bool cmdok, waits, opspi, descs, vtabs, confs, regis, astrc, strct, cmpst, injct, raw, all, tsv;
+  bool cmdok, waits, opspi, descs, vtabs, confs, regis, astrc, strct, cmpst, injct, raw, all, tsv, mcus;
   char *flags;
   int nprinted;
   AVRPART *nullpart = avr_new_part();
@@ -914,7 +980,7 @@ void dev_output_part_defs(char *partdesc) {
   if(!flags && str_eq(partdesc, "*"))   // Treat -p * as if it was -p */s
     flags = "s";
 
-  if(!*flags || !strchr("dsASRvcreow*tiBCUPTIJWHQ", *flags)) {
+  if(!*flags || !strchr("dsASRvcreow*tiBCUPTIJWHQM", *flags)) {
     dev_info("Error: flags for developer option -p <wildcard>/<flags> not recognised\n");
     dev_info("Wildcard examples (these need protecting in the shell through quoting):\n"
       "          * all known parts\n"
@@ -934,7 +1000,8 @@ void dev_output_part_defs(char *partdesc) {
       "          o  opcodes for SPI programming parts and memories\n"
       "          w  wd_... constants for ISP parts\n"
       "          *  as first character: all of the above except s and S\n"
-      " BCUPTIJWHQ  only Boot/Classic/UPDI/PDI/TPI/ISP/JTAG/debugWire/HV/quirky MUCs\n"
+      " BCUPTIJWHQ  only Boot/Classic/UPDI/PDI/TPI/ISP/JTAG/debugWIRE/HV/quirky MCUs\n"
+      "          M  only MCU entries, ie, skip entries with common values\n"
       "          t  use tab separated values as much as possible\n"
       "          i  inject assignments from source code table\n"
       "Examples:\n"
@@ -967,6 +1034,7 @@ void dev_output_part_defs(char *partdesc) {
   cmpst = !!strchr(flags, 's');
   tsv = !!strchr(flags, 't');
   injct = !!strchr(flags, 'i');
+  mcus = !!strchr(flags, 'M');
 
   // Go through all memories and add them to the memory order list
   for(LNODEID ln1 = lfirst(part_list); ln1; ln1 = lnext(ln1)) {
@@ -999,6 +1067,8 @@ void dev_output_part_defs(char *partdesc) {
     if(!part_eq(p, partdesc, str_casematch))
       continue;
     if(!prog_modes_in_flags(p->prog_modes, flags))
+      continue;
+    if(mcus && *p->id == '.')   // Do not process entries with common values
       continue;
 
     if(astrc || strct || cmpst)
@@ -1159,8 +1229,7 @@ void dev_output_part_defs(char *partdesc) {
         dev_info
           ("%s '%s' =>%*s [0x%02X, 0x%02X, 0x%02X, 0x%08x, 0x%05x, 0x%03x, "
            "0x%06x, 0x%04x, 0x%03x, %d, 0x%03x, 0x%04x, '%s'],",
-          tsv || all? ".desc": "   ",
-          p->desc, len > 0? len: 0, "",
+          tsv || all? ".desc": "   ", p->desc, maxm(len, 0), "",
           p->signature[0], p->signature[1], p->signature[2], flashoffset, flashsize, flashpagesize,
           eepromoffset, eepromsize, eeprompagesize, nfuses, ok, p->flags, dev_prog_modes(p->prog_modes));
         if(verbose > 0)
@@ -1248,6 +1317,8 @@ static void dev_pgm_raw(const PROGRAMMER *pgm) {
   if(dp.desc)
     dev_raw_dump(dp.desc, strlen(dp.desc) + 1, id, "desc", 0);
   // Dump cache_string values
+  if(dp.default_port && *dp.default_port)
+    dev_raw_dump(dp.default_port, strlen(dp.default_port) + 1, id, "default_port", 0);
   if(dp.usbdev && *dp.usbdev)
     dev_raw_dump(dp.usbdev, strlen(dp.usbdev) + 1, id, "usbdev", 0);
   if(dp.usbsn && *dp.usbsn)
@@ -1264,12 +1335,13 @@ static void dev_pgm_raw(const PROGRAMMER *pgm) {
   dp.parent_id = NULL;
   dp.initpgm = NULL;
   dp.usbpid = NULL;
+  dp.default_port = NULL;
   dp.usbdev = NULL;
   dp.usbsn = NULL;
   dp.usbvendor = NULL;
   dp.usbproduct = NULL;
   dp.hvupdi_support = NULL;
-  dp.port = NULL;
+  dp.chosen_port = NULL;
 
   // Only dump contents of PROGRAMMER struct up to and excluding the fd component
   dev_raw_dump((char *) &dp, offsetof(PROGRAMMER, fd), id, "pgm", 0);
@@ -1390,6 +1462,8 @@ static void dev_pgm_strct(const PROGRAMMER *pgm, bool tsv, const PROGRAMMER *bas
   _if_pgmout_str(intcmp, mmt_strdup(extra_features_str(pgm->extra_features)), extra_features);
   if(!base || base->conntype != pgm->conntype)
     _pgmout_fmt("connection_type", "%s", connstr(pgm->conntype));
+  if(!base || !str_eq(base->default_port, pgm->default_port)) \
+    _pgmout_fmt("port", "%s", cfg_escape(pgm->default_port));
   _if_pgmout(intcmp, "%d", baudrate);
 
   _if_pgmout(intcmp, "0x%04x", usbvid);
@@ -1523,7 +1597,7 @@ void dev_output_pgm_defs(char *pgmidcp) {
       "         r  show entries of avrdude.conf programmers as raw dump\n"
       "         t  use tab separated values as much as possible\n"
       "         i  inject assignments from source code table\n"
-      " BUPTIJWHQ  only Bootloader/UPDI/PDI/TPI/ISP/JTAG/debugWire/HV/quirky MUCs\n"
+      " BUPTIJWHQ  only Boot/UPDI/PDI/TPI/ISP/JTAG/debugWIRE/HV/quirky prog modes\n"
       "Examples:\n"
       "  $ avrdude -c usbasp/s\n"
       "  $ avrdude -c */st | grep baudrate\n"
@@ -1587,8 +1661,7 @@ void dev_output_pgm_defs(char *pgmidcp) {
         int len = 19 - strlen(id);
 
         dev_info("%s '%s' =>%*s ['%s', '%s', '%s'], # %s %d\n",
-          tsv? ".desc": "   ",
-          id, len > 0? len: 0, "",
+          tsv? ".desc": "   ", id, maxm(len, 0), "",
           locate_programmer_type_id(pgm->initpgm), dev_prog_modes(pgm->prog_modes),
           pgm->desc, pgm->config_file, pgm->lineno);
       }
